@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>barrett_wam_arm_sim</name>
+  <version>0.0.0</version>
+  <description>Simulation tools for ARL Barrett Wam Arm Sim using RViz and Gazebo</description>
+
+  <maintainer email="akeaveny@uwaterloo.ca">Aidan Keaveny</maintainer>
+  <license>MIT</license>
+  <author email="akeaveny@uwaterloo.ca">Aidan Keaveny</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>gazebo_ros</exec_depend>
+  <exec_depend>barrett_model</exec_depend>
+  <exec_depend>barrett_wam_arm_bringup</exec_depend>
+
+  <test_depend>roslaunch</test_depend>
+
+  <export>
+  </export>
+</package>

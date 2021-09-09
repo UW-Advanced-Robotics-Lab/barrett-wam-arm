@@ -1,0 +1,19 @@
+<?xml version="1.0" ?>
+<launch>
+  <!-- Robot Spawn Parameters-->
+  <arg name="spawn_x"   default="0"/>
+  <arg name="spawn_y"   default="0"/>
+  <arg name="spawn_z"   default="0"/>
+  <arg name="spawn_roll" default="0"/>
+  <arg name="spawn_pitch" default="0"/>
+  <arg name="spawn_yaw" default="0"/>
+
+  <!-- Spawn the robot in Gazebo -->
+  <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model"
+        args="-param robot_description -urdf -model barret_wam_arm
+        -x $(arg spawn_x) -y $(arg spawn_y) -z $(arg spawn_z)
+        -R $(arg spawn_roll) -P $(arg spawn_pitch) -Y $(arg spawn_yaw)"
+        respawn="false"
+	output="screen"/>
+  
+</launch>
