@@ -1,0 +1,10 @@
+<launch>
+   <!-- Load the urdf into the parameter server. -->
+   <!-- <param name="robot_description" textfile="$(find barrett_trac_ik)/urdf/wam.urdf"/> -->
+   <param name="robot_description" textfile="$(find barrett_trac_ik)/urdf/wam7_bhand.urdf"/>
+
+   <!-- -->
+  <node name="barrett_trac_ik" pkg="barrett_trac_ik" type="barrett_trac_ik_demo.py" respawn="false" output="screen">
+  </node>
+
+</launch>

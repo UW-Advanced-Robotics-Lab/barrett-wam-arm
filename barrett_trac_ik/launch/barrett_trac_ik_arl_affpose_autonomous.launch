@@ -1,0 +1,9 @@
+<launch>
+   <!-- Load the urdf into the parameter server. -->
+   <param name="robot_description" textfile="$(find barrett_tf_publisher)/urdf/wam.urdf"/>
+
+   <!-- -->
+  <node name="barrett_trac_ik" pkg="barrett_trac_ik" type="barrett_trac_ik_arl_affpose_autonomous.py" cwd="node" respawn="false" output="screen">
+  </node>
+
+</launch>
