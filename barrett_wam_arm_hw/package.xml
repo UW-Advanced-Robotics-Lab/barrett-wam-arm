@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>barrett_wam_arm_hw</name>
+  <version>0.0.0</version>
+  <description>ROS Control Hardware Interfaces for Arm of arl Rover</description>
+
+  <maintainer email="akeaveny@uwaterloo.ca">Aidan Keaveny</maintainer>
+  <license>MIT</license>
+  <author email="akeaveny@uwaterloo.ca">Aidan Keaveny</author>
+  
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>gazebo_dev</build_depend>
+  <build_depend>roslint</build_depend>
+
+  <depend>angles</depend>
+  <depend>controller_interface</depend>
+  <depend>controller_manager</depend>
+  <depend>forward_command_controller</depend>
+  <depend>gazebo_ros_control</depend>
+  <depend>gripper_action_controller</depend>
+  <depend>hardware_interface</depend>
+  <depend>joint_limits_interface</depend>
+  <depend>pluginlib</depend>
+  <depend>roscpp</depend>
+  <depend>transmission_interface</depend>
+  <depend>urdf</depend>
+
+</package>
