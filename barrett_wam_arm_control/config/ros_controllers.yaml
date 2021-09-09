@@ -1,0 +1,145 @@
+ros_control_namespace: "/"
+# MoveIt-specific simulation settings
+moveit_sim_hw_interface:
+  joint_model_group: controllers_initial_group_
+  joint_model_group_pose: controllers_initial_pose_
+# Settings for ros_control control loop
+generic_hw_control_loop:
+  loop_hz: 300
+  cycle_time_error_threshold: 0.01
+# Settings for ros_control hardware interface
+hardware_interface:
+  joints:
+    - wam/base_yaw_joint
+    - wam/shoulder_pitch_joint
+    - wam/shoulder_yaw_joint
+    - wam/elbow_pitch_joint
+    - wam/wrist_yaw_joint
+    - wam/wrist_pitch_joint
+    - wam/palm_yaw_joint
+    # - wam/bhand/finger_1/prox_joint
+    # - wam/bhand/finger_1/med_joint
+    # - wam/bhand/finger_1/dist_joint
+    # - wam/bhand/finger_2/prox_joint
+    # - wam/bhand/finger_2/med_joint
+    # - wam/bhand/finger_2/dist_joint
+    # - wam/bhand/finger_3/med_joint
+    # - wam/bhand/finger_3/dist_joint
+
+  sim_control_mode: 1  # 0: position, 1: velocity
+# Publish all joint states
+# Creates the /joint_states topic necessary in ROS
+joint_state_controller:
+   type: joint_state_controller/JointStateController
+   publish_rate: 50
+
+controller_list: []  # Not sure why this is required
+
+arm_cartesian_controller:
+ type: velocity_controllers/ARLCartesianController
+ # root_name: world
+ # tip_name: wam/wrist_palm_stump_link
+ root_name: wam/base_link
+ tip_name: wam/wrist_palm_link
+ joints:
+    - wam/base_yaw_joint
+    - wam/shoulder_pitch_joint
+    - wam/shoulder_yaw_joint
+    - wam/elbow_pitch_joint
+    - wam/wrist_yaw_joint
+    - wam/wrist_pitch_joint
+    - wam/palm_yaw_joint
+
+arm_trajectory_controller:
+  type: position_controllers/JointTrajectoryController
+  joints:
+    - wam/base_yaw_joint
+    - wam/shoulder_pitch_joint
+    - wam/shoulder_yaw_joint
+    - wam/elbow_pitch_joint
+    - wam/wrist_yaw_joint
+    - wam/wrist_pitch_joint
+    - wam/palm_yaw_joint
+  gains:
+    wam/base_yaw_joint:
+      p: 100
+      d: 10
+      i: 0.0
+      i_clamp: 1.0
+    wam/shoulder_pitch_joint:
+      p: 100
+      d: 10
+      i: 0.0
+      i_clamp: 1.0
+    wam/shoulder_yaw_joint:
+      p: 100
+      d: 10
+      i: 0.0
+      i_clamp: 1.0
+    wam/elbow_pitch_joint:
+      p: 100
+      d: 10
+      i: 0.0
+      i_clamp: 1.0
+    wam/wrist_yaw_joint:
+      p: 100
+      d: 10
+      i: 0.0
+      i_clamp: 1.0
+    wam/wrist_pitch_joint:
+      p: 100
+      d: 10
+      i: 0.0
+      i_clamp: 1.0
+    wam/palm_yaw_joint:
+      p: 100
+      d: 10
+      i: 0.0
+      i_clamp: 1.0
+
+arm_position_controller:
+  type: position_controllers/JointGroupPositionController
+  joints:
+    - wam/base_yaw_joint
+    - wam/shoulder_pitch_joint
+    - wam/shoulder_yaw_joint
+    - wam/elbow_pitch_joint
+    - wam/wrist_yaw_joint
+    - wam/wrist_pitch_joint
+    - wam/palm_yaw_joint
+  gains:
+    wam/base_yaw_joint:
+      p: 100
+      d: 10
+      i: 0.0
+      i_clamp: 1.0
+    wam/shoulder_pitch_joint:
+      p: 100
+      d: 10
+      i: 0.0
+      i_clamp: 1.0
+    wam/shoulder_yaw_joint:
+      p: 100
+      d: 10
+      i: 0.0
+      i_clamp: 1.0
+    wam/elbow_pitch_joint:
+      p: 100
+      d: 10
+      i: 0.0
+      i_clamp: 1.0
+    wam/wrist_yaw_joint:
+      p: 100
+      d: 10
+      i: 0.0
+      i_clamp: 1.0
+    wam/wrist_pitch_joint:
+      p: 100
+      d: 10
+      i: 0.0
+      i_clamp: 1.0
+    wam/palm_yaw_joint:
+      p: 100
+      d: 10
+      i: 0.0
+      i_clamp: 1.0
