@@ -1,0 +1,30 @@
+<robot name="wam"
+  xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- Includea all the WAM stuff -->
+  <xacro:include filename="$(find barrett_model)/models/wam_top.urdf.xacro"/>
+
+  <!--<gazebo>
+    <plugin filename="libgazebo_uwrt_arm_hw.so" name="uwrt_arm_hw">
+      <robotNamespace>/</robotNamespace>
+    </plugin>
+  </gazebo> -->
+
+  <gazebo>
+    <plugin name="barrett_wam_arm_hw" filename="libgazebo_barrett_wam_arm_hw.so">
+      <robotNamespace>/</robotNamespace>
+    </plugin>
+  </gazebo>
+
+   <!-- <gazebo>
+    <plugin name="gazebo_ros_control" filename="libgazebo_ros_control.so">
+      <robotNamespace>/</robotNamespace>
+    </plugin>
+  </gazebo> -->
+
+  <!-- Root link is in the world frame-->
+  <link name="world"/>
+
+  <!-- 7-DOF Wam -->
+  <xacro:wam_7dof prefix="wam" parent_link="world" xyz="0.0 0.0 0.0" rpy="0 0 0" />
+</robot>
