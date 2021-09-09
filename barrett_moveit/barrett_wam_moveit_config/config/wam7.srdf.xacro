@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="wam">
+  <xacro:include filename="$(find barrett_wam_moveit_config)/config/wam_top.srdf.xacro"/>
+
+  <!-- The "arm" group. 
+       This is the group used for motion planning. We have to compose a single
+       group because MoveIt does not allow combining of multiple group
+       specifications with the same name. Additionally, in order to work
+       with the planner, the motion planning group needs to be a chain, and 
+       can't have a more general tree structure. -->
+  <group name="arm">
+    <!-- Include the basic WAM joints -->
+    <xacro:wam_7dof_joints prefix="$(arg prefix)"/>
+    <!-- Include an additional joint for the "empty" end-effector -->
+    <xacro:if value="$(arg empty)">
+      <xacro:wam_7dof_ee_joints prefix="$(arg prefix)"/>
+    </xacro:if>
+
+    <!-- Include the semantic description of the hand links -->
+    <xacro:if value="$(arg hand)">
+      <xacro:bhand_joints prefix="$(arg prefix)/hand" wam_prefix="$(arg prefix)"/>
+    </xacro:if>
+    <!-- Include the semantic description of the ball links -->
+    <xacro:if value="$(arg ball)">
+      <xacro:bball_joints prefix="$(arg prefix)/ball" wam_prefix="$(arg prefix)"/>
+    </xacro:if>
+  </group>
+
+  <!-- Include WAM poses -->
+  <xacro:wam_7dof_states prefix="$(arg prefix)"/>
+  <!-- Include WAM collision descriptions -->
+  <xacro:wam_7dof_collisions prefix="$(arg prefix)"/>
+
+  <!-- Include the specification of the "empty" end-effector -->
+  <xacro:if value="$(arg empty)">
+    <xacro:wam_7dof_ee prefix="$(arg prefix)"/>
+  </xacro:if>
+
+  <!-- Include the specification of the hand end-effector and collision descriptions -->
+  <xacro:if value="$(arg hand)">
+    <xacro:bhand_ee prefix="$(arg prefix)/hand" wam_prefix="$(arg prefix)"/>
+    <xacro:bhand_collisions prefix="$(arg prefix)/hand" wam_prefix="$(arg prefix)"/>
+  </xacro:if>
+
+  <!-- Include the specification of the ball end-effector and collision descriptions -->
+  <xacro:if value="$(arg ball)">
+    <xacro:bball_ee prefix="$(arg prefix)/ball" wam_prefix="$(arg prefix)"/>
+    <xacro:bball_collisions prefix="$(arg prefix)/ball" wam_prefix="$(arg prefix)"/>
+  </xacro:if>
+
+</robot>

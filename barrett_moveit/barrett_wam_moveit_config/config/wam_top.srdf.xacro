@@ -1,0 +1,6 @@
+<?xml version="1.0" ?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:include filename="$(find barrett_wam_moveit_config)/config/arm.srdf.xacro"/>
+  <xacro:include filename="$(find barrett_wam_moveit_config)/config/hand.srdf.xacro"/>
+  <xacro:include filename="$(find barrett_wam_moveit_config)/config/ball.srdf.xacro"/>
+</robot>

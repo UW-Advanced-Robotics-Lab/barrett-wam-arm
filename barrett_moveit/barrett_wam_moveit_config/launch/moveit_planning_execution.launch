@@ -1,0 +1,18 @@
+<launch>
+  <!--
+    - The planning and execution components of MoveIt! configured to 
+    - publish the current configuration of the robot (simulated or real)
+    - and the current state of the world as seen by the planner
+    -->
+
+  <arg name="rviz" default="true"/>
+  <arg name="joint_states_topic" default="joint_states"/>
+
+  <include file="$(find barrett_wam_moveit_config)/launch/move_group.launch">
+    <arg name="publish_monitored_planning_scene" value="true" />
+    <arg name="joint_states_topic" value="$(arg joint_states_topic)"/>
+  </include>
+  <!--The visualization component of MoveIt!-->
+  <include if="$(arg rviz)" file="$(find barrett_wam_moveit_config)/launch/moveit_rviz.launch"/>
+</launch>
+

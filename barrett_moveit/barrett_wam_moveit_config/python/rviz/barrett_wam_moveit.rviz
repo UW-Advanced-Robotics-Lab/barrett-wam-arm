@@ -1,0 +1,353 @@
+Panels:
+  - Class: rviz/Displays
+    Help Height: 0
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /RobotModel1
+        - /TF1
+        - /TF1/Frames1
+      Splitter Ratio: 0.5740740895271301
+    Tree Height: 901
+  - Class: rviz/Help
+    Name: Help
+  - Class: rviz/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+Preferences:
+  PromptSaveOnExit: true
+Toolbars:
+  toolButtonStyle: 2
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 1
+      Class: rviz/Grid
+      Color: 160; 160; 164
+      Enabled: true
+      Line Style:
+        Line Width: 0.029999999329447746
+        Value: Lines
+      Name: Grid
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Plane: XY
+      Plane Cell Count: 10
+      Reference Frame: <Fixed Frame>
+      Value: true
+    - Alpha: 0.75
+      Class: rviz/RobotModel
+      Collision Enabled: false
+      Enabled: true
+      Links:
+        All Links Enabled: true
+        Expand Joint Details: false
+        Expand Link Details: false
+        Expand Tree: false
+        Link Tree Style: Links in Alphabetic Order
+        wam/base_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wam/bhand/bhand_grasp_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        wam/bhand/bhand_palm_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wam/bhand/bhand_palm_surface_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        wam/bhand/finger_1/dist_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wam/bhand/finger_1/med_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wam/bhand/finger_1/prox_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wam/bhand/finger_1/tip_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        wam/bhand/finger_2/dist_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wam/bhand/finger_2/med_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wam/bhand/finger_2/prox_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wam/bhand/finger_2/tip_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        wam/bhand/finger_3/dist_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wam/bhand/finger_3/med_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wam/bhand/finger_3/tip_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        wam/forearm_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wam/shoulder_pitch_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wam/shoulder_yaw_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wam/upper_arm_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wam/wrist_palm_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wam/wrist_palm_stump_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        wam/wrist_pitch_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wam/wrist_yaw_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        world:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+      Name: RobotModel
+      Robot Description: robot_description
+      TF Prefix: ""
+      Update Interval: 0
+      Value: true
+      Visual Enabled: true
+    - Class: rviz/TF
+      Enabled: true
+      Frame Timeout: 1
+      Frames:
+        All Enabled: false
+        aruco_marker_frame:
+          Value: false
+        base_link:
+          Value: false
+        camera_frame:
+          Value: true
+        map:
+          Value: false
+        object_frame:
+          Value: true
+        odom:
+          Value: false
+        wam/base_link:
+          Value: false
+        wam/bhand/bhand_grasp_link:
+          Value: false
+        wam/bhand/bhand_palm_link:
+          Value: false
+        wam/bhand/bhand_palm_surface_link:
+          Value: false
+        wam/bhand/finger_1/dist_link:
+          Value: false
+        wam/bhand/finger_1/med_link:
+          Value: false
+        wam/bhand/finger_1/prox_link:
+          Value: false
+        wam/bhand/finger_1/tip_link:
+          Value: false
+        wam/bhand/finger_2/dist_link:
+          Value: false
+        wam/bhand/finger_2/med_link:
+          Value: false
+        wam/bhand/finger_2/prox_link:
+          Value: false
+        wam/bhand/finger_2/tip_link:
+          Value: false
+        wam/bhand/finger_3/dist_link:
+          Value: false
+        wam/bhand/finger_3/med_link:
+          Value: false
+        wam/bhand/finger_3/tip_link:
+          Value: false
+        wam/forearm_link:
+          Value: false
+        wam/shoulder_pitch_link:
+          Value: false
+        wam/shoulder_yaw_link:
+          Value: false
+        wam/upper_arm_link:
+          Value: false
+        wam/wrist_palm_link:
+          Value: false
+        wam/wrist_palm_stump_link:
+          Value: true
+        wam/wrist_pitch_link:
+          Value: false
+        wam/wrist_yaw_link:
+          Value: false
+        world:
+          Value: false
+        zed_camera_center:
+          Value: false
+        zed_imu_link:
+          Value: false
+        zed_left_camera_frame:
+          Value: false
+        zed_left_camera_optical_frame:
+          Value: false
+        zed_right_camera_frame:
+          Value: false
+        zed_right_camera_optical_frame:
+          Value: false
+      Marker Scale: 0.5
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Tree:
+        map:
+          odom:
+            {}
+        world:
+          wam/base_link:
+            object_frame:
+              {}
+            wam/shoulder_yaw_link:
+              wam/shoulder_pitch_link:
+                wam/upper_arm_link:
+                  wam/forearm_link:
+                    camera_frame:
+                      {}
+                    wam/wrist_yaw_link:
+                      wam/wrist_pitch_link:
+                        wam/wrist_palm_link:
+                          wam/bhand/bhand_palm_link:
+                            wam/bhand/bhand_grasp_link:
+                              {}
+                            wam/bhand/bhand_palm_surface_link:
+                              {}
+                            wam/bhand/finger_1/prox_link:
+                              wam/bhand/finger_1/med_link:
+                                wam/bhand/finger_1/dist_link:
+                                  wam/bhand/finger_1/tip_link:
+                                    {}
+                            wam/bhand/finger_2/prox_link:
+                              wam/bhand/finger_2/med_link:
+                                wam/bhand/finger_2/dist_link:
+                                  wam/bhand/finger_2/tip_link:
+                                    {}
+                            wam/bhand/finger_3/med_link:
+                              wam/bhand/finger_3/dist_link:
+                                wam/bhand/finger_3/tip_link:
+                                  {}
+                          wam/wrist_palm_stump_link:
+                            {}
+          zed_camera_center:
+            zed_left_camera_frame:
+              zed_imu_link:
+                {}
+              zed_left_camera_optical_frame:
+                {}
+            zed_right_camera_frame:
+              zed_right_camera_optical_frame:
+                {}
+      Update Interval: 2
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Default Light: true
+    Fixed Frame: world
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz/Interact
+      Hide Inactive Objects: true
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+  Value: true
+  Views:
+    Current:
+      Class: rviz/XYOrbit
+      Distance: 1.024160385131836
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.05999999865889549
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Focal Point:
+        X: 0.5707255005836487
+        Y: 0.2398202121257782
+        Z: 8.404836080444511e-7
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05000000074505806
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.009999999776482582
+      Pitch: 0.38979899883270264
+      Target Frame: world
+      Value: XYOrbit (rviz)
+      Yaw: 1.0606803894042969
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 1052
+  Help:
+    collapsed: false
+  Hide Left Dock: false
+  Hide Right Dock: false
+  QMainWindow State: 000000ff00000000fd00000001000000000000021e000003c2fc0200000007fb000000100044006900730070006c006100790073010000003d000003c2000000c900fffffffb0000000800480065006c00700000000342000000bb0000006e00fffffffb0000000a0056006900650077007300000003b0000000b0000000a400fffffffb0000000c00430061006d00650072006100000002ff000001610000000000000000fb0000001e004d006f00740069006f006e00200050006c0061006e006e0069006e00670100000374000001890000000000000000fb00000044004d006f00740069006f006e0050006c0061006e006e0069006e00670020002d0020005400720061006a006500630074006f0072007900200053006c00690064006500720000000000ffffffff0000000000000000fb0000001c004d006f00740069006f006e0050006c0061006e006e0069006e006700000002670000017d000000000000000000000519000003c200000001000000020000000100000002fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Views:
+    collapsed: false
+  Width: 1853
+  X: 1987
+  Y: 0

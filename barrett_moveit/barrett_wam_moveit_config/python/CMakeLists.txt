@@ -1,0 +1,6 @@
+install(PROGRAMS
+  scripts/moveit_to_densefusion_node.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+install(DIRECTORY launch DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})

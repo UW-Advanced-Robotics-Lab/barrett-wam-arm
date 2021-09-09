@@ -1,0 +1,13 @@
+controller_list:
+  - name: fake_arm_controller
+    joints:
+      - wam/base_yaw_joint
+      - wam/shoulder_pitch_joint
+      - wam/shoulder_yaw_joint
+      - wam/elbow_pitch_joint
+      - wam/wrist_yaw_joint
+      - wam/wrist_pitch_joint
+      - wam/palm_yaw_joint
+initial:  # Define initial robot poses.
+  - group: arm
+    pose: ARL

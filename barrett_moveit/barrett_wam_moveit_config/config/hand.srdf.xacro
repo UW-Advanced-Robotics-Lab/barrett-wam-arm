@@ -1,0 +1,77 @@
+<?xml version="1.0" ?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!--GROUPS: Representation of a set of joints and links. This can be useful for specifying DOF to plan for, defining arms, end effectors, etc-->
+  <!--LINKS: When a link is specified, the parent joint of that link (if it exists) is automatically included-->
+  <!--JOINTS: When a joint is specified, the child link of that joint (which will always exist) is automatically included-->
+  <!--CHAINS: When a chain is specified, all the links along the chain (including endpoints) are included in the group. Additionally, all the joints that are parents to included links are also included. This means that joints along the chain and the parent joint of the base link are included in the group-->
+  <!--SUBGROUPS: Groups can also be formed by referencing to already defined group names-->
+  <xacro:macro name="bhand_joints" params="prefix wam_prefix">
+    <joint name="${prefix}/bhand_base_joint" />
+    <joint name="${prefix}/bhand_grasp_joint" />
+    <link name="${prefix}/bhand_grasp_link" />
+    <!--GROUP STATES: Purpose: Define a named state for a particular group, in terms of joint values. This is useful to define states like 'folded arms'-->
+    <!--END EFFECTOR: Purpose: Represent information about an end effector.-->
+    <!--DISABLE COLLISIONS: By default it is assumed that any link of the robot could potentially come into collision with any other link in the robot. This tag disables collision checking between a specified pair of links. -->
+  </xacro:macro>
+
+  <xacro:macro name="bhand_ee" params="prefix wam_prefix">
+    <end_effector name="${wam_prefix}_bhand_grasp" parent_link="${prefix}/bhand_grasp_link" group="arm"/>
+  </xacro:macro>
+
+  <xacro:macro name="bhand_collisions" params="prefix wam_prefix">
+    <xacro:bhand_palm prefix="${prefix}" wam_prefix="${wam_prefix}"/>
+    <xacro:bhand_finger_1_or_2 prefix="${prefix}" finger="1" wam_prefix="${wam_prefix}"/>
+    <xacro:bhand_finger_1_or_2 prefix="${prefix}" finger="2" wam_prefix="${wam_prefix}"/>
+    <xacro:bhand_finger_3 prefix="${prefix}" wam_prefix="${wam_prefix}"/>
+  </xacro:macro>
+
+  <!-- Fingers -->
+  <xacro:macro name="bhand_finger_1_or_2" params="prefix finger wam_prefix">
+    <xacro:bhand_finger_prox prefix="${prefix}" finger="${finger}" wam_prefix="${wam_prefix}"/>
+    <xacro:bhand_finger_med prefix="${prefix}" finger="${finger}" prox="true" wam_prefix="${wam_prefix}"/>
+    <xacro:bhand_finger_dist prefix="${prefix}" finger="${finger}" prox="true" wam_prefix="${wam_prefix}"/>
+  </xacro:macro>
+
+  <xacro:macro name="bhand_finger_3" params="prefix wam_prefix">
+    <xacro:bhand_finger_med prefix="${prefix}" finger="3" prox="false" wam_prefix="${wam_prefix}"/>
+    <xacro:bhand_finger_dist prefix="${prefix}" finger="3" prox="false" wam_prefix="${wam_prefix}"/>
+  </xacro:macro>
+
+  <!-- Components -->
+  <xacro:macro name="bhand_palm" params="prefix wam_prefix">
+    <disable_collisions link1="${prefix}/bhand_palm_link" link2="${wam_prefix}/wrist_yaw_link" reason="Never" />
+    <disable_collisions link1="${prefix}/bhand_palm_link" link2="${wam_prefix}/wrist_pitch_link" reason="Never" />
+    <disable_collisions link1="${prefix}/bhand_palm_link" link2="${wam_prefix}/wrist_palm_link" reason="Adjacent" />
+  </xacro:macro>
+
+  <xacro:macro name="bhand_finger_prox" params="prefix finger wam_prefix">
+    <passive_joint name="${prefix}/finger_${finger}/prox_joint" />
+    <disable_collisions link1="${prefix}/finger_${finger}/prox_link" link2="${wam_prefix}/wrist_yaw_link" reason="Never" />
+    <disable_collisions link1="${prefix}/finger_${finger}/prox_link" link2="${wam_prefix}/wrist_pitch_link" reason="Never" />
+    <disable_collisions link1="${prefix}/finger_${finger}/prox_link" link2="${wam_prefix}/wrist_palm_link" reason="Never" />
+    <disable_collisions link1="${prefix}/finger_${finger}/prox_link" link2="${prefix}/bhand_palm_link" reason="Adjacent" />
+  </xacro:macro>
+
+  <xacro:macro name="bhand_finger_med" params="prefix finger prox wam_prefix">
+    <passive_joint name="${prefix}/finger_${finger}/med_joint" />
+    <disable_collisions link1="${prefix}/finger_${finger}/med_link" link2="${wam_prefix}/wrist_yaw_link" reason="Never" />
+    <disable_collisions link1="${prefix}/finger_${finger}/med_link" link2="${wam_prefix}/wrist_pitch_link" reason="Never" />
+    <disable_collisions link1="${prefix}/finger_${finger}/med_link" link2="${wam_prefix}/wrist_palm_link" reason="Never" />
+    <disable_collisions link1="${prefix}/finger_${finger}/med_link" link2="${prefix}/bhand_palm_link" reason="Never" />
+    <xacro:if value="${prox}">
+      <disable_collisions link1="${prefix}/finger_${finger}/med_link" link2="${prefix}/finger_${finger}/prox_link" reason="Adjacent" />
+    </xacro:if>
+  </xacro:macro>
+
+  <xacro:macro name="bhand_finger_dist" params="prefix finger prox wam_prefix">
+    <passive_joint name="${prefix}/finger_${finger}/dist_joint" />
+    <disable_collisions link1="${prefix}/finger_${finger}/dist_link" link2="${wam_prefix}/wrist_yaw_link" reason="Never" />
+    <disable_collisions link1="${prefix}/finger_${finger}/dist_link" link2="${wam_prefix}/wrist_pitch_link" reason="Never" />
+    <disable_collisions link1="${prefix}/finger_${finger}/dist_link" link2="${wam_prefix}/wrist_palm_link" reason="Never" />
+    <disable_collisions link1="${prefix}/finger_${finger}/dist_link" link2="${prefix}/bhand_palm_link" reason="Never" />
+    <disable_collisions link1="${prefix}/finger_${finger}/dist_link" link2="${prefix}/finger_${finger}/med_link" reason="Adjacent" />
+    <xacro:if value="${prox}">
+      <disable_collisions link1="${prefix}/finger_${finger}/dist_link" link2="${prefix}/finger_${finger}/prox_link" reason="Never" />
+    </xacro:if>
+  </xacro:macro>
+</robot>
