@@ -82,18 +82,18 @@ class TracIKPublisher:
         # Init default capture position.
         self.drop_joint_positions = [1.25, 0.5, 0, 1.85, 0, 0, 0] 
         self.capture_joint_positions = [0.0, -0.65, 0, 2.9, 0.985, 0.75, 0]
-        # self.capture_joint_positions = [0, -0.15, 0, 2.8, 0.985, 0.75, 0]
-        # self.capture_joint_positions = [0.0, -0.85, 0, 3.1, 1.2, 0, 0]
+        # self.capture_joint_positions = [-0.010664818811014457, 0.2588219265648463, 0.0041507017839967075, 2.4101254307236786, 0.6987519702342996, -0.23444603278767662, -0.40399279691670076]
+        # self.capture_joint_positions = [0.75098659952115131, 0.25800742349163264, -0.7373197180033716, 2.4101254307236786, 0.6993845396313658, 0.45191575519941163, -0.40327358288353266]
+        # self.capture_joint_positions = [-0.75145044609272625, 0.2585504255404417, 0.7406950139595887, 2.4101254307236786, 0.6988310414089329,  0.45191575519941163, -0.40440377636422536]
 
-        self.send_gripper_to_capture_position(init_gripper=True)
+        self.send_gripper_to_capture_position(init_gripper=False)
 
         #######################
         # Grasp Strategies.
         #######################
 
         self.obj_ids_for_top_down_grasps = np.array([1, 2, 3, 4, 5, 10, 11])
-        self.z_offset_for_top_down_grasp = 0.15
-        self.z_offset_for_successful_grasp = 0.10
+        self.z_offset_for_top_down_grasp = 0.20  # 20 [cm] is about the tallest object
 
         self.obj_ids_for_forward_grasps = np.array([6, 7, 8, 9])
         self.x_offset_for_forward_grasp = 0.085  # X [cm] BEHIND object.
@@ -131,13 +131,6 @@ class TracIKPublisher:
         # finite_state_manager_thread = threading.Thread(target=self.finite_state_manager.update_robot_state)
         # finite_state_manager_thread.daemon = True
         # finite_state_manager_thread.start()
-
-        #######################
-        #######################
-
-        rospy.loginfo("")
-        rospy.loginfo("Barrett arm is ready for grasping")
-        rospy.loginfo("")
 
     #######################
     #######################
@@ -256,17 +249,18 @@ class TracIKPublisher:
         self.pose_meas_idx = 0
 
     def send_gripper_to_capture_position(self, init_gripper=False):
-
-        if init_gripper:
-            self.bhand_srv_close_grasp()
-            time.sleep(1.25)
-
         # Send Barret to capture position.
         self.send_barrett_joint_positions_cmd(self.capture_joint_positions)
         time.sleep(3)
         # Ensure bhand is closed.
         self.bhand_srv_close_grasp()
         time.sleep(1.25)
+
+        if init_gripper:
+            # Ensure bhand is open for grasping.
+            self.bhand_srv_open_grasp()
+            time.sleep(1.25)
+            self.bhand_srv_close_grasp()
 
     def send_gripper_to_drop_position(self):
         # Send Barret to capture position.
@@ -359,11 +353,11 @@ class TracIKPublisher:
 
         # Move the barrett above the object.
         self.send_barrett_joint_positions_cmd(wam_joint_states_1)
-        time.sleep(10)
+        time.sleep(7)
 
         # Move the barrett down to the object.
         self.send_barrett_joint_positions_cmd(wam_joint_states_2)
-        time.sleep(5)
+        time.sleep(3)
 
         # grasp object.
         self.bhand_srv_close_grasp()
@@ -372,39 +366,19 @@ class TracIKPublisher:
         #######################
         #######################
 
-        # test successful grasp.
-        position_1 = self.barrett_pose[:3]
-        orientation_1 = self.barrett_pose[3:]
-        # move up in z direction
-        position_1[2] += self.z_offset_for_successful_grasp
-        self.send_barrett_pose_cmd(position_1, orientation_1)
-        time.sleep(3)
-
         # move arm up out of the way
         position_1 = self.barrett_pose[:3]
         orientation_1 = self.barrett_pose[3:]
         # move up in z direction
-        position_1[2] -= self.z_offset_for_successful_grasp
+        position_1[2] += self.z_offset_for_top_down_grasp
         self.send_barrett_pose_cmd(position_1, orientation_1)
         time.sleep(3)
-
-        # grasp object.
-        self.bhand_srv_open_grasp()
-        time.sleep(1)
 
         # drop object
-        # self.send_gripper_to_drop_position()
+        self.send_gripper_to_drop_position()
 
         #######################
         #######################
-
-        # move arm up out of the way
-        position_1 = self.barrett_pose[:3]
-        orientation_1 = self.barrett_pose[3:]
-        # move up in z direction
-        position_1[2] += self.z_offset_for_successful_grasp
-        self.send_barrett_pose_cmd(position_1, orientation_1)
-        time.sleep(3)
 
         self.reset_barrett_arm_for_grasping()
         time.sleep(3)
