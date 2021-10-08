@@ -10,6 +10,8 @@ import math
 import numpy as np
 import cv2
 
+from enum import IntEnum
+
 from scipy.spatial.transform import Rotation as R
 
 import rospy
@@ -20,7 +22,7 @@ import tf2_geometry_msgs
 import geometry_msgs.msg
 
 from geometry_msgs.msg import Pose, PoseStamped
-from std_msgs.msg import Bool, Float64MultiArray
+from std_msgs.msg import Bool, Float64MultiArray, Int8
 
 ROOT_DIR = '/home/akeaveny/catkin_ws/src/barrett_trac_ik/'
 sys.path.append(ROOT_DIR)
@@ -34,6 +36,48 @@ from trac_ik_python.trac_ik import IK
 #######################
 
 class TracIKPublisher():
+    class WARM_STATUS(IntEnum):
+        # Will-publish:
+        CORRIDOR_DOOR_BUTTON    = 1  # 1 : press the door button of the corridor
+        ELEV_DOOR_BUTTON_CALL   = 2  # 2: press the elevator call button
+        ELEV_DOOR_BUTTON_INSIDE = 3  # 3: press the floor button inside the elevator
+        FAILED                  = -1 # -1: operation failed
+        # Wont-publish:
+        HOMING                  = 4  # 4: operation failed
+
+    # Look up table for pre-calibrated joint-positions
+    LUT_CAPTURED_JOINT_POSITIONS = {
+        WARM_STATUS.ELEV_DOOR_BUTTON_INSIDE : [    
+            0.00695301832677738,
+            -0.4587789565136406,
+            -0.002222416045176924,
+            2.208318148967319,
+            0.027892071199038658,
+            -0.1788168083040264,
+            -0.028431769350072793
+        ],
+        WARM_STATUS.ELEV_DOOR_BUTTON_CALL : [
+            0.00695301832677738,
+            -0.4587789565136406,
+            -0.002222416045176924,
+            2.208318148967319,
+            0.027892071199038658,
+            -0.1788168083040264,
+            -0.028431769350072793
+        ],
+        WARM_STATUS.CORRIDOR_DOOR_BUTTON : [
+            0.76,
+            -0.4587789565136406,
+            -0.002222416045176924,
+            2.308318148967319,
+            0.027892071199038658,
+            -0.1788168083040264,
+            -0.028431769350072793
+        ],
+        WARM_STATUS.FAILED : [0, -1.25, 0, 3, 0, 0, 0],
+        WARM_STATUS.HOMING : [0, -1.25, 0, 3, 0, 0, 0]
+    }
+
 
     def __init__(self):
 
@@ -59,10 +103,10 @@ class TracIKPublisher():
         # DEMO Sub-Tasks
         #######################
 
-        self.demo_sub_tasks_summit_sub = rospy.Subscriber("/task_completion_flag_summit", Int16, self.demo_sub_tasks_callback)
+        self.demo_sub_tasks_summit_sub = rospy.Subscriber("/task_completion_flag_summit", Int8, self.demo_sub_tasks_callback)
 
         # self.demo_sub_tasks_summit_pub = rospy.Publisher("/task_completion_flag_wam", Int16, queue_size=1)
-        self.demo_sub_tasks_wam_pub = rospy.Publisher("/task_completion_flag_wam", Int16, queue_size=1)
+        self.demo_sub_tasks_wam_pub = rospy.Publisher("/task_completion_flag_wam", Int8, queue_size=1)
 
         self.is_summit_in_position = False
 
@@ -83,33 +127,8 @@ class TracIKPublisher():
 
         self.is_barrett_capture = False
 
-        # For elevator button (inside)
-        # self.capture_joint_positions = [0.00695301832677738,
-        #                              -0.4587789565136406,
-        #                              -0.002222416045176924,
-        #                              2.208318148967319,
-        #                              0.027892071199038658,
-        #                              -0.1788168083040264,
-        #                              -0.028431769350072793]
-
-        # For elevator button (outside)
-        # self.capture_joint_positions = [0.00695301832677738,
-        #                              -0.4587789565136406,
-        #                              -0.002222416045176924,
-        #                              2.208318148967319,
-        #                              0.027892071199038658,
-        #                              -0.1788168083040264,
-        #                              -0.028431769350072793]
-        # For corridor door
-        self.capture_joint_positions = [0.76,
-                                     -0.4587789565136406,
-                                     -0.002222416045176924,
-                                     2.308318148967319,
-                                     0.027892071199038658,
-                                     -0.1788168083040264,
-                                     -0.028431769350072793]
-
-        self.home_joint_positions = [0, -1.25, 0, 3, 0, 0, 0]
+        self.capture_joint_positions = self.LUT_CAPTURED_JOINT_POSITIONS[self.WARM_STATUS.HOMING]
+        self.home_joint_positions = self.LUT_CAPTURED_JOINT_POSITIONS[self.WARM_STATUS.HOMING]
 
         self.is_barrett_home = False
         self.send_barrett_to_joint_positions(self.home_joint_positions, barrett_arm_state='Home')
@@ -153,9 +172,18 @@ class TracIKPublisher():
     def demo_sub_tasks_callback(self, is_summit_in_position_msg):
         print("Demo sub tasks callback")
         if is_summit_in_position_msg.data:
+            # interpret position request:
+            self.warm_request = self.WARM_STATUS.FAILED
+            try: 
+                self.warm_request = self.WARM_STATUS(is_summit_in_position_msg.data)
+            except ValueError:
+                self.warm_request = self.WARM_STATUS.FAILED
+            # update position request:
+            self.capture_joint_positions = self.LUT_CAPTURED_JOINT_POSITIONS[warm_request]
+            # perform:
             self.is_summit_in_position = True
             rospy.loginfo("")
-            rospy.loginfo("Summit is in position for Barrett Arm operations!")
+            rospy.loginfo("Summit is in position for Barrett Arm operations! [REQUEST: {}]".format(warm_request))
             self.send_barrett_to_joint_positions(self.capture_joint_positions, barrett_arm_state='Capture')
 
     #######################
@@ -406,14 +434,14 @@ class TracIKPublisher():
 
         self.send_barrett_to_joint_positions(self.home_joint_positions, barrett_arm_state='Home')
 
-        msg = Bool()
-        msg.data = True
-        self.demo_sub_tasks_wam_pub.publish(msg)
+        # msg = Int8()
+        # msg.data = # TODO
+        # self.demo_sub_tasks_wam_pub.publish(msg)
 
-        msg = Bool()
-        self.is_summit_in_position = False
-        msg.data = self.is_summit_in_position
-        self.demo_sub_tasks_summit_pub.publish(msg)
+        # msg = Bool()
+        # self.is_summit_in_position = False
+        # msg.data = self.is_summit_in_position
+        # self.demo_sub_tasks_summit_pub.publish(msg)
 
     #######################
     #######################
@@ -446,4 +474,7 @@ def main():
         rate.sleep()
 
 if __name__ == '__main__':
-    main()
+    try: 
+        main()
+    except rospy.ROSInterruptException:
+        pass
