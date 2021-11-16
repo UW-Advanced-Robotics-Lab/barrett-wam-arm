@@ -1,17 +1,21 @@
-# Barrett WAM Arm tf publisher
+# Object Pose for Grasping
 
-In this work we want to transform the object's pose from the camera frame, a measurement provided by [DenseFusion](https://github.com/j96w/DenseFusion), to the base link of our 7-DoF arm for robotic grasping. 
+![ros_overview](../samples/coordinate_transforms.png)
 
-I use this TF Publisher with the following repos:
+There are four main coordinate frames are used to grasp an object.
 
-1. [Labelusion](https://github.com/akeaveny/LabelFusion) for generating Real Images
-2. [NDDS](https://github.com/NVIDIA/Dataset_Synthesizer) for generating Synthetic Images
-3. [PyTorch-Simple-AffNet](https://github.com/akeaveny/DenseFusion) for predicting 6-DoF Object Pose.
-4. [DenseFusion](https://github.com/akeaveny/DenseFusion) for predicting 6-DoF Object Pose.
-5. AffDenseFusionROSNode: coming soon.
+1. Base link of the manipulator
 
-Here is a demo of this repo in simulation.
-![Alt text](samples/sim_demo.gif?raw=true "Title")
+2. Camera Frame
 
-Here is a demo of us grasping an object in the lab!
-![Alt text](samples/lab_demo.gif?raw=true "Title")
+    This is a dynamic transform as we mounted our camera on our arm. **This package publishes the Camera Frame.**
+     
+3. Object Frame
+    
+    The 6-DoF pose was determined either using marker-based methods, such as [aruco_ros](https://github.com/pal-robotics/aruco_ros), or using deep learning, such as [DOPE](https://github.com/NVlabs/Deep_Object_Pose) or [DenseFusion](https://github.com/j96w/DenseFusion).
+    
+4. End Effector Frame
+
+    We used a 8-DoF Barrett Hand. Which has +/- 17.5cm from tip to the center of the palm. Note that two-finger grippers require the object pose to be accurate within +/- 2cm.
+    
+Ultimately, we need to align the end effector frame to the pose of the object w.r.t. base link of the manipulator.
