@@ -41,7 +41,7 @@ Simulation tools were developed to improve and/or debug software packages used i
 
     ```roslaunch tf_publisher tf_publisher_sim.launch```
     
-3. Afterwards, RGB-D images were played back from the ARL AffPose Dataset. A 6-DoF pose was used to command the robot using trac ik in simulation.
+3. Afterwards, RGB-D images were played back from the [ARL AffPose Dataset](https://github.com/UW-Advanced-Robotics-Lab/arl-affpose-dataset-utils). A 6-DoF pose was used to command the robot using trac ik in simulation.
 
     ```roslaunch trac_ik barrett_trac_ik_arl_affpose_simple.launch```
 
