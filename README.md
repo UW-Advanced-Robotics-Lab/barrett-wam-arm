@@ -7,8 +7,6 @@ Here is an overview of our Architecture.
 
 # Object Pose for Grasping
 
-![ros_overview](samples/coordinate_transforms.png)
-
 There are four main coordinate frames are used to grasp an object.
 
 1. Base link of the manipulator
@@ -27,7 +25,7 @@ There are four main coordinate frames are used to grasp an object.
     
 Ultimately, we need to align the end effector frame to the pose of the object w.r.t. base link of the manipulator.
 
-Here is a demo!
+![ros_overview](samples/coordinate_transforms.png)
 
 # Launch in Simulation
 
