@@ -10,7 +10,7 @@ import math
 import numpy as np
 import cv2
 
-from enum import IntEnum
+from enum import Enum
 
 from scipy.spatial.transform import Rotation as R
 
@@ -36,18 +36,26 @@ from trac_ik_python.trac_ik import IK
 #######################
 
 class TracIKPublisher():
-    class WAM_STATUS(IntEnum):
+    class WAM_REQUEST(Enum):
         # Will-publish:
-        CORRIDOR_DOOR_BUTTON    = 1  # 1 : press the door button of the corridor
-        ELEV_DOOR_BUTTON_CALL   = 2  # 2: press the elevator call button
-        ELEV_DOOR_BUTTON_INSIDE = 3  # 3: press the floor button inside the elevator
-        FAILED                  = -1 # -1: operation failed
+        CORRIDOR_DOOR_BUTTON    =  1  #: press the door button of the corridor
+        ELEV_DOOR_BUTTON_CALL   =  2  #: press the elevator call button
+        ELEV_DOOR_BUTTON_INSIDE =  3  #: press the floor button inside the elevator
+        FAILED                  = -1  #: operation failed
         # Wont-publish:
-        HOMING                  = 4  # 4: operation failed
+        HOMING                  =  4  #: homing
+    class WAM_STATUS(Enum):
+        # Will-publish:
+        CORRIDOR_DOOR_BUTTON    =  101  #: press the door button of the corridor
+        ELEV_DOOR_BUTTON_CALL   =  102  #: press the elevator call button
+        ELEV_DOOR_BUTTON_INSIDE =  103  #: press the floor button inside the elevator
+        FAILED                  = -101  #: operation failed
+        # Wont-publish:
+        HOMING                  =  104  #: homed
 
     # Look up table for pre-calibrated joint-positions
     LUT_CAPTURED_JOINT_POSITIONS = {
-        WAM_STATUS.ELEV_DOOR_BUTTON_INSIDE : [    
+        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : [    
             0.00695301832677738,
             -0.4587789565136406,
             -0.002222416045176924,
@@ -56,7 +64,7 @@ class TracIKPublisher():
             -0.1788168083040264,
             -0.028431769350072793
         ],
-        WAM_STATUS.ELEV_DOOR_BUTTON_CALL : [
+        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL : [
             0.00695301832677738,
             -0.4587789565136406,
             -0.002222416045176924,
@@ -65,7 +73,7 @@ class TracIKPublisher():
             -0.1788168083040264,
             -0.028431769350072793
         ],
-        WAM_STATUS.CORRIDOR_DOOR_BUTTON : [
+        WAM_REQUEST.CORRIDOR_DOOR_BUTTON : [
             0.76,
             -0.4587789565136406,
             -0.002222416045176924,
@@ -74,8 +82,8 @@ class TracIKPublisher():
             -0.1788168083040264,
             -0.028431769350072793
         ],
-        WAM_STATUS.FAILED : [0, -1.25, 0, 3, 0, 0, 0],
-        WAM_STATUS.HOMING : [0, -1.25, 0, 3, 0, 0, 0]
+        WAM_REQUEST.FAILED : [0, -1.25, 0, 3, 0, 0, 0],
+        WAM_REQUEST.HOMING : [0, -1.25, 0, 3, 0, 0, 0]
     }
 
 
@@ -127,8 +135,8 @@ class TracIKPublisher():
 
         self.is_barrett_capture = False
 
-        self.capture_joint_positions = self.LUT_CAPTURED_JOINT_POSITIONS[self.WAM_STATUS.HOMING]
-        self.home_joint_positions = self.LUT_CAPTURED_JOINT_POSITIONS[self.WAM_STATUS.HOMING]
+        self.capture_joint_positions = self.LUT_CAPTURED_JOINT_POSITIONS[self.WAM_REQUEST.HOMING]
+        self.home_joint_positions = self.LUT_CAPTURED_JOINT_POSITIONS[self.WAM_REQUEST.HOMING]
 
         self.is_barrett_home = False
         self.send_barrett_to_joint_positions(self.home_joint_positions, barrett_arm_state='Home')
@@ -173,17 +181,16 @@ class TracIKPublisher():
         print("Demo sub tasks callback")
         if is_summit_in_position_msg.data:
             # interpret position request:
-            self.wam_request = self.WAM_STATUS.FAILED
+            self.wam_request = self.WAM_REQUEST.FAILED
             try: 
-                self.wam_request = self.WAM_STATUS(is_summit_in_position_msg.data)
+                self.wam_request = self.WAM_REQUEST(is_summit_in_position_msg.data)
             except ValueError:
-                self.wam_request = self.WAM_STATUS.FAILED
+                self.wam_request = self.WAM_REQUEST.FAILED
             # update position request:
-            self.capture_joint_positions = self.LUT_CAPTURED_JOINT_POSITIONS[wam_request]
+            self.capture_joint_positions = self.LUT_CAPTURED_JOINT_POSITIONS[self.wam_request]
             # perform:
             self.is_summit_in_position = True
-            rospy.loginfo("")
-            rospy.loginfo("Summit is in position for Barrett Arm operations! [REQUEST: {}]".format(wam_request))
+            rospy.loginfo("Summit is in position for Barrett Arm operations! [REQUEST: {}]".format(self.wam_request))
             self.send_barrett_to_joint_positions(self.capture_joint_positions, barrett_arm_state='Capture')
 
     #######################
@@ -434,14 +441,15 @@ class TracIKPublisher():
 
         self.send_barrett_to_joint_positions(self.home_joint_positions, barrett_arm_state='Home')
 
-        # msg = Int8()
-        # msg.data = # TODO
-        # self.demo_sub_tasks_wam_pub.publish(msg)
+        if self.is_barrett_capture:
+            msg = Int8()
+            msg.data = self.WAM_STATUS[self.wam_request.name].value # remap request to status
+            self.demo_sub_tasks_wam_pub.publish(msg)
 
-        # msg = Bool()
-        # self.is_summit_in_position = False
-        # msg.data = self.is_summit_in_position
-        # self.demo_sub_tasks_summit_pub.publish(msg)
+            msg = Bool()
+            self.is_summit_in_position = False
+            msg.data = self.is_summit_in_position
+            self.demo_sub_tasks_summit_pub.publish(msg)
 
     #######################
     #######################
