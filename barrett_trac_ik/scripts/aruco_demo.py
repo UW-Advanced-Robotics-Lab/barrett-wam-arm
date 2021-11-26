@@ -206,12 +206,13 @@ class ArUcoDemo():
         self._zed_position      = None
         self._zed_orientation   = None
         
+        # non-thread cache placeholder
         self._target_wam_request        = None
         self._target_zed_position       = None
+        self._target_zed_position_after = None
         self._target_zed_orientation    = None
 
-        
-        self._capture_position_timeout_tick_100ms = 0
+        self._stage_timeout_tick_100ms = 0
 
 
     #==================================#
@@ -275,7 +276,7 @@ class ArUcoDemo():
                 rospy.logerr("Invalid WAM Request from SUMMIT.")
     
         ### Timeout Overrides ###
-        if self._capture_position_timeout_tick_100ms > self._STAGE_TIME_OUT_100MS[self._curr_stage]:
+        if self._stage_timeout_tick_100ms > self._STAGE_TIME_OUT_100MS[self._curr_stage]:
 
             # - [Time-out] Booted-on / Booted-off:
             if      self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE:
@@ -284,7 +285,7 @@ class ArUcoDemo():
 
             # - [Time-out] Initialized at Homing Position:
             elif    self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.WINGS:
-                # DO NOTHING
+                # DO NOTHING, Note: No time-out for the homing stage
                 pass # END
             
             # - [Time-out] Reached Pre-Captured Position:
@@ -346,30 +347,28 @@ class ArUcoDemo():
             # -> Invoke to AruCo Marker
             if      new_stage is DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION:
                 ####################### BEGIN #######################
-                # TODO: please refactor below
-                #######################
-                # pub tf
-                #######################
+                # - cache pose locally:
+                position = self._target_zed_position
+                orientation = self._target_zed_orientation
+                target = self._target_wam_request
+
+                ### pub tf ###
                 # orientation = np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)])
+                # - TF:
+                aruco_frame_wrt_camera_frame = geometry_msgs.msg.TransformStamped()
+                aruco_frame_wrt_camera_frame.header.frame_id = self._WAM_JOINT_IDs["camera_link_frame"]
+                aruco_frame_wrt_camera_frame.child_frame_id = self._WAM_JOINT_IDs["aruco_frame"]
+                aruco_frame_wrt_camera_frame.header.stamp = rospy.Time.now()
+                aruco_frame_wrt_camera_frame.transform.translation.x = position[0]
+                aruco_frame_wrt_camera_frame.transform.translation.y = position[1]
+                aruco_frame_wrt_camera_frame.transform.translation.z = position[2]
+                aruco_frame_wrt_camera_frame.transform.rotation.x = orientation[0]
+                aruco_frame_wrt_camera_frame.transform.rotation.y = orientation[1]
+                aruco_frame_wrt_camera_frame.transform.rotation.z = orientation[2]
+                aruco_frame_wrt_camera_frame.transform.rotation.w = orientation[3]
+                self.transform_broadcaster.sendTransform(aruco_frame_wrt_camera_frame)
 
-                # tf
-                # TODO: rename aruco_frame_wrt_camera_frame
-                aruco_frame_on_object = geometry_msgs.msg.TransformStamped()
-                aruco_frame_on_object.header.frame_id = self._WAM_JOINT_IDs["camera_link_frame"]
-                aruco_frame_on_object.child_frame_id = self._WAM_JOINT_IDs["aruco_frame"]
-                aruco_frame_on_object.header.stamp = rospy.Time.now()
-                aruco_frame_on_object.transform.translation.x = position[0]
-                aruco_frame_on_object.transform.translation.y = position[1]
-                aruco_frame_on_object.transform.translation.z = position[2]
-                aruco_frame_on_object.transform.rotation.x = orientation[0]
-                aruco_frame_on_object.transform.rotation.y = orientation[1]
-                aruco_frame_on_object.transform.rotation.z = orientation[2]
-                aruco_frame_on_object.transform.rotation.w = orientation[3]
-                self.transform_broadcaster.sendTransform(aruco_frame_on_object)
-
-                ##################################
-                # Transforms from zed cam feed
-                ##################################
+                ### Transforms from zed cam feed ###
                 time.sleep(3)
                 try:
 
@@ -391,143 +390,145 @@ class ArUcoDemo():
                     # object_T_world
                     object_to_world = tf2_geometry_msgs.do_transform_pose(object_in_camera_frame_msg, camera_to_world)
 
-                    position = np.array([object_to_world.pose.position.x,
+                    position = np.array([   object_to_world.pose.position.x,
                                             object_to_world.pose.position.y,
                                             object_to_world.pose.position.z])
 
-                    orientation = np.array([
-                                            object_to_world.pose.orientation.x,
+                    orientation = np.array([object_to_world.pose.orientation.x,
                                             object_to_world.pose.orientation.y,
                                             object_to_world.pose.orientation.z,
                                             object_to_world.pose.orientation.w])
 
                 except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
                     rospy.logwarn("Can't find transform from {} to {}".format(self._WAM_JOINT_IDs["base_link_frame"], self._WAM_JOINT_IDs["camera_link_frame"]))
-                    return None
+                    success = False
 
-                # position[0] += 0.07
-                # position[1] -= 0.16
-                x_axis = np.array([1,0,0])
-                y_axis = np.array([0,1,0])
-                z_axis = np.array([0,0,1])
-                # orientation = np.array([1/np.sqrt(2), 0, 1/np.sqrt(2), 0])
-                # orientation = np.array([0,0,0,1])
+                ### Tranform to joint positions ###
+                if success:
+                    # position[0] += 0.07
+                    # position[1] -= 0.16
+                    x_axis = np.array([1,0,0])
+                    y_axis = np.array([0,1,0])
+                    z_axis = np.array([0,0,1])
+                    # orientation = np.array([1/np.sqrt(2), 0, 1/np.sqrt(2), 0])
+                    # orientation = np.array([0,0,0,1])
 
-                normal_dir = R.from_quat(orientation).apply(z_axis)
-                tag_x_axis_dir = R.from_quat(orientation).apply(x_axis)
-                tag_y_axis_dir = R.from_quat(orientation).apply(y_axis)
-                # NOTE: Next two lines are for the elevator (outside) only (comment out for other locations)
-                # position += -0.017 * tag_x_axis_dir
-                # position += -0.177 * tag_y_axis_dir
+                    normal_dir = R.from_quat(orientation).apply(z_axis)
+                    tag_x_axis_dir = R.from_quat(orientation).apply(x_axis)
+                    tag_y_axis_dir = R.from_quat(orientation).apply(y_axis)
 
-                # NOTE: Next two lines are for the elevator (inside) only (comment out for other locations)
-                position += 0.02 * tag_y_axis_dir
-                position += -0.11 * tag_x_axis_dir
+                    if target is WAM_REQUEST.ELEV_DOOR_BUTTON_CALL:
+                        # NOTE: Next two lines are for the elevator (outside) only (comment out for other locations)
+                        position += -0.017 * tag_x_axis_dir
+                        position += -0.177 * tag_y_axis_dir
+                    elif target is WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE:    
+                        # NOTE: Next two lines are for the elevator (inside) only (comment out for other locations)
+                        position += 0.02 * tag_y_axis_dir
+                        position += -0.11 * tag_x_axis_dir
 
-                print("Normal Dir: {}".format(normal_dir))
-                # before_position = position.copy()
-                # position[2] += 0.025
-                before_position = position + 0.25 * normal_dir
-                after_position = position + 0.125 * normal_dir
-                print("Befpre position: {}, After position: {}".format(before_position, position))
-
-                #######################
-                # modify marker value in sim
-                #######################
-
-                # position = np.array([0.5, 0, 0.85])
-                # orientation = np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)]) # perpendicular to the floor
-
-                # self._ros_log_object_pose(t=position, q=orientation)
-
-                #######################
-                # pub tf
-                #######################
-
-                # # tf
-                aruco_frame_on_object = geometry_msgs.msg.TransformStamped()
-                aruco_frame_on_object.header.frame_id = self._WAM_JOINT_IDs["base_link_frame"]
-                aruco_frame_on_object.child_frame_id = self._WAM_JOINT_IDs["aruco_frame_offset"] # self._WAM_JOINT_IDs["aruco_frame"]
-                aruco_frame_on_object.header.stamp = rospy.Time.now()
-                aruco_frame_on_object.transform.translation.x = before_position[0]
-                aruco_frame_on_object.transform.translation.y = before_position[1]
-                aruco_frame_on_object.transform.translation.z = before_position[2]
-                aruco_frame_on_object.transform.rotation.x = orientation[0]
-                aruco_frame_on_object.transform.rotation.y = orientation[1]
-                aruco_frame_on_object.transform.rotation.z = orientation[2]
-                aruco_frame_on_object.transform.rotation.w = orientation[3]
-                self.transform_broadcaster.sendTransform(aruco_frame_on_object)
-
-                #######################
-                # 1. capture --> before aruco
-                #######################
-                # TODO: note: position of the arm before pressing aruco marker, for DEBUGGING
-                # rotation = R.from_euler('y', 90, degrees=True)
-                # rotation2 = R.from_euler('z', 90, degrees=True)
-                # orientation = rotation2 * rotation * R.from_quat(orientation)
-                # orientation = orientation.as_quat()
-                # # orientation = np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)])
-                #
-                # aruco_frame_on_object = geometry_msgs.msg.TransformStamped()
-                # aruco_frame_on_object.header.frame_id = self._WAM_JOINT_IDs["base_link_frame"]
-                # aruco_frame_on_object.child_frame_id = 'ee_target' # self._WAM_JOINT_IDs["aruco_frame"]
-                # aruco_frame_on_object.header.stamp = rospy.Time.now()
-                # aruco_frame_on_object.transform.translation.x = position[0]
-                # aruco_frame_on_object.transform.translation.y = position[1]
-                # aruco_frame_on_object.transform.translation.z = position[2]
-                # aruco_frame_on_object.transform.rotation.x = orientation[0]
-                # aruco_frame_on_object.transform.rotation.y = orientation[1]
-                # aruco_frame_on_object.transform.rotation.z = orientation[2]
-                # aruco_frame_on_object.transform.rotation.w = orientation[3]
-                # self.transform_broadcaster.sendTransform(aruco_frame_on_object)
-
-                # Calculate required orientation for end effector (For elevator button)
-                rotate_y_90 = R.from_quat(np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)]))
-                x_axis = np.array([1,0,0])
-                rotate_angle = -np.arccos(np.dot(x_axis, -normal_dir))
-                second_rotation = R.from_rotvec(rotate_angle * np.array([0, 0, 1]))
-                orientation = second_rotation * rotate_y_90
-                orientation = orientation.as_quat()
-
-                # (For door)
-                # rotate_x_90 = R.from_quat(np.array([-1/np.sqrt(2), 0, 0, 1/np.sqrt(2)]))
-                # orientation = rotate_x_90
-                # orientation = orientation.as_quat()
-                # print("Orientation: {}".format(orientation))
+                    print("Normal Dir: {}".format(normal_dir))
+                    # before_position = position.copy()
+                    # position[2] += 0.025
+                    before_position = position + 0.25 * normal_dir
+                    after_position = position + 0.125 * normal_dir
+                    print("Befpre position: {}, After position: {}".format(before_position, position))
 
 
-                # orientation = R.from_euler(np.array([3.142, 0, 0])).apply(orientation).to_quat()
-                # orientation = np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)])
-                before_aruco_position = before_position.copy()
-                # before_aruco_position[0] -= 15 / 100                                    # offset for: 'wam/wrist_palm_link'
-                # before_aruco_position[0] = before_aruco_position[0] - 10/100            # before aruco
-                before_aruco_orientation = orientation
-                # before_aruco_orientation = np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)]) # perpendicular to the floor
-                print(before_aruco_position)
-                wam_joint_states = self.ik_solver.get_ik(self._IK_SEED_STATE_IC,
-                                                        #########################
-                                                        before_aruco_position[0],
-                                                        before_aruco_position[1],
-                                                        before_aruco_position[2],
-                                                        before_aruco_orientation[0],
-                                                        before_aruco_orientation[1],
-                                                        before_aruco_orientation[2],
-                                                        before_aruco_orientation[3],
-                                                        #########################
-                                                        # brx=0.5, bry=0.5, brz=0.5
-                                                        )
+                    ### modify marker value in sim ###
+                    # position = np.array([0.5, 0, 0.85])
+                    # orientation = np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)]) # perpendicular to the floor
+                    # self._ros_log_object_pose(t=position, q=orientation)
 
-                wam_joint_states = np.array(wam_joint_states, dtype=float).reshape(-1).tolist()
-                print("[trac-ik]   /wam/joint_states: ", wam_joint_states)
-                if len(wam_joint_states) == 1:
-                    rospy.logwarn("IK solver failed ..")
-                    return
+                    ### pub tf ###
+                    # - tf
+                    aruco_frame_wrt_camera_frame = geometry_msgs.msg.TransformStamped()
+                    aruco_frame_wrt_camera_frame.header.frame_id = self._WAM_JOINT_IDs["base_link_frame"]
+                    aruco_frame_wrt_camera_frame.child_frame_id = self._WAM_JOINT_IDs["aruco_frame_offset"] # self._WAM_JOINT_IDs["aruco_frame"]
+                    aruco_frame_wrt_camera_frame.header.stamp = rospy.Time.now()
+                    aruco_frame_wrt_camera_frame.transform.translation.x = before_position[0]
+                    aruco_frame_wrt_camera_frame.transform.translation.y = before_position[1]
+                    aruco_frame_wrt_camera_frame.transform.translation.z = before_position[2]
+                    aruco_frame_wrt_camera_frame.transform.rotation.x = orientation[0]
+                    aruco_frame_wrt_camera_frame.transform.rotation.y = orientation[1]
+                    aruco_frame_wrt_camera_frame.transform.rotation.z = orientation[2]
+                    aruco_frame_wrt_camera_frame.transform.rotation.w = orientation[3]
+                    self.transform_broadcaster.sendTransform(aruco_frame_wrt_camera_frame)
 
-                self.send_barrett_to_joint_positions(joint_positions=wam_joint_states,
-                                                    barrett_arm_state="before arUco")
-                time.sleep(10)
+                    ###############################
+                    # 1. capture --> before aruco #
+                    ###############################
+                    ### DEBUGGING CODE ###
+                    # TODO: note: position of the arm before pressing aruco marker, for DEBUGGING
+                    # rotation = R.from_euler('y', 90, degrees=True)
+                    # rotation2 = R.from_euler('z', 90, degrees=True)
+                    # orientation = rotation2 * rotation * R.from_quat(orientation)
+                    # orientation = orientation.as_quat()
+                    # # orientation = np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)])
+                    #
+                    # aruco_frame_wrt_camera_frame = geometry_msgs.msg.TransformStamped()
+                    # aruco_frame_wrt_camera_frame.header.frame_id = self._WAM_JOINT_IDs["base_link_frame"]
+                    # aruco_frame_wrt_camera_frame.child_frame_id = 'ee_target' # self._WAM_JOINT_IDs["aruco_frame"]
+                    # aruco_frame_wrt_camera_frame.header.stamp = rospy.Time.now()
+                    # aruco_frame_wrt_camera_frame.transform.translation.x = position[0]
+                    # aruco_frame_wrt_camera_frame.transform.translation.y = position[1]
+                    # aruco_frame_wrt_camera_frame.transform.translation.z = position[2]
+                    # aruco_frame_wrt_camera_frame.transform.rotation.x = orientation[0]
+                    # aruco_frame_wrt_camera_frame.transform.rotation.y = orientation[1]
+                    # aruco_frame_wrt_camera_frame.transform.rotation.z = orientation[2]
+                    # aruco_frame_wrt_camera_frame.transform.rotation.w = orientation[3]
+                    # self.transform_broadcaster.sendTransform(aruco_frame_wrt_camera_frame)
+
+                    ### Orientation ###
+                    # - Calculate required orientation for end effector:
+                    # - (For elevator button)
+                    if target in [WAM_REQUEST.ELEV_DOOR_BUTTON_CALL, WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE]:
+                        rotate_y_90 = R.from_quat(np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)]))
+                        x_axis = np.array([1,0,0])
+                        rotate_angle = -np.arccos(np.dot(x_axis, -normal_dir))
+                        second_rotation = R.from_rotvec(rotate_angle * np.array([0, 0, 1]))
+                        orientation = second_rotation * rotate_y_90
+                        orientation = orientation.as_quat()
+                    # - (For door)
+                    elif target is WAM_REQUEST.CORRIDOR_DOOR_BUTTON:
+                        rotate_x_90 = R.from_quat(np.array([-1/np.sqrt(2), 0, 0, 1/np.sqrt(2)]))
+                        orientation = rotate_x_90
+                        orientation = orientation.as_quat()
+                        print("Orientation: {}".format(orientation))
+
+
+                    # orientation = R.from_euler(np.array([3.142, 0, 0])).apply(orientation).to_quat()
+                    # orientation = np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)])
+                    before_aruco_position = before_position.copy()
+                    # before_aruco_position[0] -= 15 / 100                                    # offset for: 'wam/wrist_palm_link'
+                    # before_aruco_position[0] = before_aruco_position[0] - 10/100            # before aruco
+                    before_aruco_orientation = orientation
+                    # before_aruco_orientation = np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)]) # perpendicular to the floor
+                    print(before_aruco_position)
+                    wam_joint_states = self.ik_solver.get_ik(
+                        self._IK_SEED_STATE_IC,
+                        #########################
+                        before_aruco_position[0],
+                        before_aruco_position[1],
+                        before_aruco_position[2],
+                        before_aruco_orientation[0],
+                        before_aruco_orientation[1],
+                        before_aruco_orientation[2],
+                        before_aruco_orientation[3],
+                        #########################
+                        # brx=0.5, bry=0.5, brz=0.5
+                    )
+
+                    wam_joint_states = np.array(wam_joint_states, dtype=float).reshape(-1).tolist()
+                    if len(wam_joint_states) == 1:
+                        rospy.logwarn("IK solver failed ..")
+                        success = False
+                    else:
+                        print("[trac-ik]   /wam/joint_states: ", wam_joint_states)
+                        self._send_barrett_to_joint_positions_non_block(wam_joint_states)
+
+                    ### Record ###
+                    self._target_zed_position_after = after_position # cached towards the next stage
                 #######################  END  #######################
-
             else:
                 success = False
         
@@ -536,9 +537,12 @@ class ArUcoDemo():
         elif    self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION:
             # -> Invoke to press AruCo Marker
             if      new_stage is DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION:
-                # TODO: please refactor below
                 ####################### BEGIN #######################
+                # - cache pose locally:
+                orientation = self._target_zed_orientation
+                after_position = self._target_zed_position_after
 
+                ### Compute ArUco Pressing Action:
                 at_aruco_position = after_position.copy()
                 # at_aruco_position[0] -= 15 / 100                                         # offset for: 'wam/wrist_palm_link'
                 at_aruco_orientation = orientation
@@ -558,15 +562,12 @@ class ArUcoDemo():
                                                         )
 
                 wam_joint_states = np.array(wam_joint_states, dtype=float).reshape(-1).tolist()
-                print("[trac-ik]   /wam/joint_states: ", wam_joint_states)
                 if len(wam_joint_states) == 1:
                     rospy.logwarn("IK solver failed ..")
-                    return
-
-                self.send_barrett_to_joint_positions(joint_positions=wam_joint_states,
-                                                    barrett_arm_state="at arUco")
-                time.sleep(10)
-                
+                    success = False
+                else:
+                    print("[trac-ik]   /wam/joint_states: ", wam_joint_states)
+                    self._send_barrett_to_joint_positions_non_block(wam_joint_states)
                 #######################  END  #######################            
             else:
                 success = False
@@ -577,7 +578,6 @@ class ArUcoDemo():
             # -> Invoke to home, end of the choreography
             if      new_stage is DEMO_STAGE_CHOREOGRAPHY.WINGS:
                 ####################### BEGIN #######################
-
                 # - HOMING:
                 self._send_barrett_to_joint_positions_non_block(self._LUT_CAPTURED_JOINT_POSITIONS[WAM_REQUEST.HOMING])
 
@@ -587,18 +587,24 @@ class ArUcoDemo():
                     msg.data = WAM_STATUS[self._target_wam_request.name].value # remap request to status
                     self.demo_sub_tasks_wam_pub.publish(msg)
 
+                # - Reset Caches:
+                self._target_wam_request        = None
+                self._target_zed_position       = None
+                self._target_zed_position_after = None
+                self._target_zed_orientation    = None
                 #######################  END  #######################
             else:
                 success = False
-        
         # - Unknown:
         else:
             success = False
 
         ### Update ###
         if success:
+            # - enter the new stage
             self._curr_stage = new_stage
         else:
+            # - stuck in stage transition
             rospy.logerr("Invalid Stage Transition From [{}] -x-> [{}]".format(self._curr_stage, new_stage))
             
         return success
@@ -633,7 +639,7 @@ class ArUcoDemo():
             rospy.logerr("Invalid Stage Transition.")
             pass # Do Nothing
         
-        self._capture_position_timeout_tick_100ms += 1
+        self._stage_timeout_tick_100ms += 1
     
     #######################
     # Helper Functions
