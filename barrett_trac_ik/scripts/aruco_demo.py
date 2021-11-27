@@ -16,7 +16,7 @@ import time
 import math
 import threading
 
-from enum import Enum, auto
+from enum import Enum
 
 # python 3rd party:
 import cv2
@@ -84,11 +84,11 @@ class DEMO_STAGE_CHOREOGRAPHY(Enum):
 
         @NOTE: [stage terms](https://medium.com/the-improv-blog/7-basic-stage-terms-for-improvisers-590870cf08a5)
     """
-    OFF_STAGE           = auto()
-    WINGS               = auto() # "at Home"
-    ON_STAGE            = auto() # "at Capture": at pre-capture joint positions
-    IMPROVISATION       = auto() # "before pressing ArUco": live action based on zed-camera
-    POST_IMPROVISATION  = auto() # "pressing ArUco": live action based on zed-camera
+    OFF_STAGE           = 0
+    WINGS               = 1 # "at Home"
+    ON_STAGE            = 2 # "at Capture": at pre-capture joint positions
+    IMPROVISATION       = 3 # "before pressing ArUco": live action based on zed-camera
+    POST_IMPROVISATION  = 4 # "pressing ArUco": live action based on zed-camera
 
 class ArUcoDemo():
     #===================#
@@ -155,11 +155,11 @@ class ArUcoDemo():
     ]
 
     _STAGE_TIME_OUT_100MS = {
-        DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE           : 10,
-        DEMO_STAGE_CHOREOGRAPHY.WINGS               : 10,
-        DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 10,
-        DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION       : 10,
-        DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION  : 10,
+        DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE           : 50,
+        DEMO_STAGE_CHOREOGRAPHY.WINGS               : 50,
+        DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 50,
+        DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION       : 50,
+        DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION  : 50,
     }
     
     #===============================#
@@ -171,14 +171,14 @@ class ArUcoDemo():
         #######################
         ### TF Tramsform Module ###
         self._tf_buffer             = tf2_ros.Buffer()
-        self._listener              = tf2_ros.TransformListener(self.tf_buffer)
+        self._listener              = tf2_ros.TransformListener(self._tf_buffer)
         self._transform_broadcaster = tf2_ros.TransformBroadcaster()
 
         ### Subscriber ###
         # - summit command subscriber
         self._subscriber_summit     = rospy.Subscriber("/task_completion_flag_summit", Int8, self._callback_upon_summit_cmd)
         # - zed camera feed with aruco pose: 
-        self._object_pose_sub       = rospy.Subscriber("/aruco_single/pose", PoseStamped, self.object_pose_callback)
+        self._object_pose_sub       = rospy.Subscriber("/aruco_single/pose", PoseStamped, self._callback_upon_zed_pose)
 
         ### Publisher ###
         # - publish WAM Choreography status
@@ -223,6 +223,7 @@ class ArUcoDemo():
         @brief: update stage choreography per 100 [ms]
         """
         new_stage = self._stage_check()
+        print("> [{}] -> [{}]".format(self._curr_stage, new_stage))
         if self._curr_stage is not new_stage:
             self._stage_transition(new_stage = new_stage)
         self._stage_action()
@@ -249,6 +250,8 @@ class ArUcoDemo():
         with self._zed_lock:
             position    = self._zed_position
             orientation = self._zed_orientation
+        
+        print("[Info] r:{} p:{} o:{}".format(wam_request, position, orientation))
 
         ### Log ###
         # - Log AruCo Marker Zed Pose, when reaching towards ArUco Marker
@@ -260,7 +263,7 @@ class ArUcoDemo():
         if self._curr_stage in [
                 # - wait for system auto booting
                 None,
-                DEMO_STAGE_CHOREOGRAPHY.FAILED,
+                DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE,
                 # - Do not interrupt the show, wait for completion!
                 DEMO_STAGE_CHOREOGRAPHY.ON_STAGE,
                 DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION,
@@ -269,12 +272,13 @@ class ArUcoDemo():
             pass
         # - a new request while no show has been started (aka. in homing position):
         elif self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.WINGS:
-            if wam_request not in [None, DEMO_STAGE_CHOREOGRAPHY.FAILED]:
+            if wam_request not in [None, WAM_REQUEST.FAILED]:
                 self._target_wam_request = wam_request
-                new_stage = DEMO_STAGE_CHOREOGRAPHY.WINGS
+                new_stage = DEMO_STAGE_CHOREOGRAPHY.ON_STAGE
             else:
-                rospy.logerr("Invalid WAM Request from SUMMIT.")
-    
+                # rospy.logerr("Invalid WAM Request from SUMMIT.")
+                print("- No command yet!")
+
         ### Timeout Overrides ###
         if self._stage_timeout_tick_100ms > self._STAGE_TIME_OUT_100MS[self._curr_stage]:
 
@@ -290,9 +294,12 @@ class ArUcoDemo():
             
             # - [Time-out] Reached Pre-Captured Position:
             elif    self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.ON_STAGE:
-                self._target_zed_position    = position
-                self._target_zed_orientation = orientation
-                new_stage = DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION
+                if position is not None and orientation is not None:
+                    self._target_zed_position    = position
+                    self._target_zed_orientation = orientation
+                    new_stage = DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION
+                else:
+                    rospy.logwarn("No ArUco Marker Found, waiting for target!")
                 pass # END
             
             # - [Time-out] Reached ArUco Marker:
@@ -310,6 +317,10 @@ class ArUcoDemo():
                 rospy.logerr("Invalid Current Stage.")
                 pass # Do Nothing
 
+        ### Homing CMD Override ###
+        if wam_request is WAM_REQUEST.HOMING:
+            new_stage = DEMO_STAGE_CHOREOGRAPHY.WINGS
+        
         return new_stage
     
 
@@ -318,10 +329,17 @@ class ArUcoDemo():
         @brief: actions based on stage transition
         """
         success = True
+        self._stage_timeout_tick_100ms = 0 # reset timeout ticks
         ### Action ###
         ###################################
+        # -> Homing Override:
+        if          new_stage is DEMO_STAGE_CHOREOGRAPHY.WINGS:
+            ####################### BEGIN #######################
+            self._send_barrett_to_joint_positions_non_block(self._LUT_CAPTURED_JOINT_POSITIONS[WAM_REQUEST.HOMING])
+            #######################  END  #######################
+        ###################################
         # - Booted-on / Booted-off:
-        if      self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE:
+        elif      self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE:
             # -> Homing Once:
             if      new_stage is DEMO_STAGE_CHOREOGRAPHY.WINGS:
                 ####################### BEGIN #######################
@@ -386,7 +404,7 @@ class ArUcoDemo():
                     ''' object_T_world = object_T_zed * zed_T_world '''
                     # grabbing transformation from camera to the base from the TF node
                     # zed_T_world
-                    camera_to_world = self.tf_buffer.lookup_transform(self._WAM_JOINT_IDs["base_link_frame"], self._WAM_JOINT_IDs["camera_link_frame"], rospy.Time(0))
+                    camera_to_world = self._tf_buffer.lookup_transform(self._WAM_JOINT_IDs["base_link_frame"], self._WAM_JOINT_IDs["camera_link_frame"], rospy.Time(0))
                     # object_T_world
                     object_to_world = tf2_geometry_msgs.do_transform_pose(object_in_camera_frame_msg, camera_to_world)
 
@@ -644,14 +662,13 @@ class ArUcoDemo():
     #######################
     # Helper Functions
     #######################
-    def _send_barrett_to_joint_positions(self, joint_positions):
-        # rospy.loginfo("[WAM] commanding to --> {} ..".format(self._curr_stage))
+    def _send_barrett_to_joint_positions_non_block(self, joint_positions):
+        rospy.loginfo("[WAM] commanding to --> {} ..".format(self._curr_stage))
         # TODO: time-out based, we shall need a feedback loop by check states???
         msg = Float64MultiArray()
         msg.data = joint_positions
         # self._command_wam_arm_srv.publish(msg)
-        self.command_barrett_arm_srv.call(joint_positions)
-        # rospy.loginfo("[WAM] time out, shall be at --> {} !".format(self._curr_stage))
+        self._command_wam_arm_srv.call(joint_positions)
 
     def _ros_log_object_pose(self, t, q):
         # convert translation to [cm]
@@ -679,10 +696,13 @@ class ArUcoDemo():
                 wam_request = WAM_REQUEST(is_summit_in_position_msg.data)
             except ValueError: # treat out-of-scope as failure
                 wam_request = WAM_REQUEST.FAILED
+                rospy.logwarn("Invalid Request [SUMMIT:{}]!".format(is_summit_in_position_msg.data))
             
             ### Capture ###
             with self._wam_lock:
                 self._wam_request = wam_request
+
+            print(" [Summit] > Request for {}".format(wam_request))
     
     def _callback_upon_zed_pose(self, object_in_camera_frame_msg):
         ### Init. ###
@@ -701,6 +721,7 @@ class ArUcoDemo():
         # orientation = np.array([w, x, y, z])
         orientation = np.array([x, y, z, w])
         # orientation = np.array([1/np.sqrt(2), 0, 1/np.sqrt(2), 0])
+        print(" [ZED] > P{} R{}".format(position, orientation))
 
         ### Capture ###
         with self._zed_lock:
