@@ -167,6 +167,12 @@ class ArUcoDemo():
     #===============================#
     def __init__(self):
         #######################
+        # Debugger:
+        #######################
+        self._verbose = False   # disable extra text prints
+        self._logging_stage = "Init"    # stage tracking
+
+        #######################
         # ROS Topical
         #######################
         ### TF Tramsform Module ###
@@ -222,15 +228,23 @@ class ArUcoDemo():
         """ 
         @brief: update stage choreography per 100 [ms]
         """
+        run_success = True
         new_stage = self._stage_check()
         print("> [{}] -> [{}]".format(self._curr_stage, new_stage))
         if self._curr_stage is not new_stage:
-            self._stage_transition(new_stage = new_stage)
+            run_success = self._stage_transition(new_stage = new_stage)
         self._stage_action()
 
     #====================================#
     #  P R I V A T E    F U N C T I O N  #
     #====================================#
+    def _format(self, info):
+        return "[ STAGE: {} ] {}".format(self._logging_stage, info)
+
+    def _print(self, info):
+        if self._verbose:
+            print(self._format(info=info))
+
     #######################
     # Staging Functions
     #######################
@@ -238,6 +252,8 @@ class ArUcoDemo():
         """ 
         @brief: check stage changes and determine the new stage
         """
+        self._logging_stage = "CHECK"
+
         ### Init ###
         new_stage = self._curr_stage
         wam_request = None
@@ -247,12 +263,12 @@ class ArUcoDemo():
         ### Fetch ###
         with self._wam_lock:
             wam_request = self._wam_request
-            self._wam_request = None
+            self._wam_request = None # clear the cache
         with self._zed_lock:
             position    = self._zed_position
             orientation = self._zed_orientation
         
-        print("[Info] r:{} p:{} o:{}".format(wam_request, position, orientation))
+        self._print(info="r:{} p:{} o:{}".format(wam_request, position, orientation))
 
         ### Log ###
         # - Log AruCo Marker Zed Pose, when reaching towards ArUco Marker
@@ -271,14 +287,17 @@ class ArUcoDemo():
                 DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION
             ]:
             pass
-        # - a new request while no show has been started (aka. in homing position):
+        # - a new request while no show has been started (aka. only in homing position):
         elif self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.WINGS:
             if wam_request not in [None, WAM_REQUEST.FAILED]:
-                self._target_wam_request = wam_request
-                new_stage = DEMO_STAGE_CHOREOGRAPHY.ON_STAGE
+                if self._target_wam_request != wam_request:
+                    self._print(info="New command ({}) has been accepted from SUMMIT!".format(wam_request))
+                    self._target_wam_request = wam_request
+                    new_stage = DEMO_STAGE_CHOREOGRAPHY.ON_STAGE
+                else:
+                    self._print(info="Discard the repeated command received from SUMMIT!")
             else:
-                # rospy.logerr("Invalid WAM Request from SUMMIT.")
-                print("- No command yet!")
+                self._print(info="No command has been received from SUMMIT!")
 
         ### Timeout Overrides ###
         if self._stage_timeout_tick_100ms > self._STAGE_TIME_OUT_100MS[self._curr_stage]:
@@ -300,7 +319,7 @@ class ArUcoDemo():
                     self._target_zed_orientation = orientation
                     new_stage = DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION
                 else:
-                    rospy.logwarn("No ArUco Marker Found, waiting for target!")
+                    rospy.logwarn(self._format(info="No ArUco Marker Found, waiting for target!"))
                 pass # END
             
             # - [Time-out] Reached ArUco Marker:
@@ -315,7 +334,7 @@ class ArUcoDemo():
             
             # - Unknown:
             else:
-                rospy.logerr("Invalid Current Stage.")
+                rospy.logerr(self._format(info="Invalid Current Stage."))
                 pass # Do Nothing
 
         ### Homing CMD Override ###
@@ -329,6 +348,8 @@ class ArUcoDemo():
         """ 
         @brief: actions based on stage transition
         """
+        self._logging_stage = "TRANSITION: [{}]->[{}]".format(self._curr_stage, new_stage)
+        # init:
         success = True
         self._stage_timeout_tick_100ms = 0 # reset timeout ticks
         ### Action ###
@@ -419,7 +440,8 @@ class ArUcoDemo():
                                             object_to_world.pose.orientation.w])
 
                 except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-                    rospy.logwarn("Can't find transform from {} to {}".format(self._WAM_JOINT_IDs["base_link_frame"], self._WAM_JOINT_IDs["camera_link_frame"]))
+                    rospy.logwarn(self._format(
+                        info="Can't find transform from {} to {}".format(self._WAM_JOINT_IDs["base_link_frame"], self._WAM_JOINT_IDs["camera_link_frame"])))
                     success = False
 
                 ### Tranform to joint positions ###
@@ -445,12 +467,12 @@ class ArUcoDemo():
                         position += 0.02 * tag_y_axis_dir
                         position += -0.11 * tag_x_axis_dir
 
-                    print("Normal Dir: {}".format(normal_dir))
+                    self._print(info="[Original] Normal Dir: {}".format(normal_dir))
                     # before_position = position.copy()
                     # position[2] += 0.025
                     before_position = position + 0.25 * normal_dir
                     after_position = position + 0.125 * normal_dir
-                    print("Befpre position: {}, After position: {}".format(before_position, position))
+                    self._print(info="[Offsetted] Before position: {}, After position: {}".format(before_position, position))
 
 
                     ### modify marker value in sim ###
@@ -512,7 +534,8 @@ class ArUcoDemo():
                         rotate_x_90 = R.from_quat(np.array([-1/np.sqrt(2), 0, 0, 1/np.sqrt(2)]))
                         orientation = rotate_x_90
                         orientation = orientation.as_quat()
-                        print("Orientation: {}".format(orientation))
+                    
+                    self._print(info="[Result] Transformed Orientation: {}".format(orientation))
 
 
                     # orientation = R.from_euler(np.array([3.142, 0, 0])).apply(orientation).to_quat()
@@ -522,7 +545,6 @@ class ArUcoDemo():
                     # before_aruco_position[0] = before_aruco_position[0] - 10/100            # before aruco
                     before_aruco_orientation = orientation
                     # before_aruco_orientation = np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)]) # perpendicular to the floor
-                    print(before_aruco_position)
                     wam_joint_states = self._ik_solver.get_ik(
                         self._IK_SEED_STATE_IC,
                         #########################
@@ -539,10 +561,9 @@ class ArUcoDemo():
 
                     wam_joint_states = np.array(wam_joint_states, dtype=float).reshape(-1).tolist()
                     if len(wam_joint_states) == 1:
-                        rospy.logwarn("IK solver failed ..")
+                        rospy.logwarn(self._format(info="IK solver failed !!"))
                         success = False
                     else:
-                        print("[trac-ik]   /wam/joint_states: ", wam_joint_states)
                         self._send_barrett_to_joint_positions_non_block(wam_joint_states)
 
                     ### Record ###
@@ -583,10 +604,9 @@ class ArUcoDemo():
 
                 wam_joint_states = np.array(wam_joint_states, dtype=float).reshape(-1).tolist()
                 if len(wam_joint_states) == 1:
-                    rospy.logwarn("IK solver failed ..")
+                    rospy.logwarn(self._format(info="IK solver failed !!"))
                     success = False
                 else:
-                    print("[trac-ik]   /wam/joint_states: ", wam_joint_states)
                     self._send_barrett_to_joint_positions_non_block(wam_joint_states)
                 #######################  END  #######################            
             else:
@@ -601,18 +621,15 @@ class ArUcoDemo():
                 # - HOMING:
                 self._send_barrett_to_joint_positions_non_block(self._LUT_CAPTURED_JOINT_POSITIONS[WAM_REQUEST.HOMING])
 
-                # - Report Status Once:
-                if self.is_barrett_capture:
-                    msg = Int8()
-                    msg.data = WAM_STATUS[self._target_wam_request.name].value # remap request to status
-                    self.demo_sub_tasks_wam_pub.publish(msg)
+                # - Report Status (Once):
+                self._pub_aruco_demo_wam_status(status = WAM_STATUS[self._target_wam_request.name])
 
                 # - Reset Caches:
-                self._target_wam_request        = None
-                self._target_zed_position       = None
-                self._target_zed_orientation    = None
-                self._target_zed_position_after       = None
-                self._target_zed_orientation_after    = None
+                self._target_wam_request           = None
+                self._target_zed_position          = None
+                self._target_zed_orientation       = None
+                self._target_zed_position_after    = None
+                self._target_zed_orientation_after = None
                 #######################  END  #######################
             else:
                 success = False
@@ -626,7 +643,7 @@ class ArUcoDemo():
             self._curr_stage = new_stage
         else:
             # - stuck in stage transition
-            rospy.logerr("Invalid Stage Transition From [{}] -x-> [{}]".format(self._curr_stage, new_stage))
+            rospy.logerr(self._format(info="Invalid Stage Transition From [{}] -x-> [{}]".format(self._curr_stage, new_stage)))
             
         return success
 
@@ -634,6 +651,7 @@ class ArUcoDemo():
         """ 
         @brief: actions based on the current stage
         """
+        self._logging_stage = "ACTION: [{}:{}]".format(self._curr_stage, self._stage_timeout_tick_100ms)
         # - Boot-on / Boot-off:
         if      self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE:
             pass # Do Nothing
@@ -657,7 +675,7 @@ class ArUcoDemo():
         
         # - Unknown:
         else:
-            rospy.logerr("Invalid Stage Transition.")
+            rospy.logerr(self._format("Invalid Stage Transition."))
             pass # Do Nothing
         
         self._stage_timeout_tick_100ms += 1
@@ -665,8 +683,14 @@ class ArUcoDemo():
     #######################
     # Helper Functions
     #######################
+    def _pub_aruco_demo_wam_status(self, status):
+        self._print(info="[{}] *))) [trac-ik] /task_completion_flag_wam: [{}:{}]".format(self._curr_stage, status, msg.data))
+        msg = Int8()
+        msg.data = status.value # remap request to status
+        self._publisher_status.publish(msg)
+    
     def _send_barrett_to_joint_positions_non_block(self, joint_positions):
-        rospy.loginfo("[WAM] commanding to --> {} ..".format(self._curr_stage))
+        self._print(info="[{}] ==> [trac-ik] /wam/joint_states: {}".format(self._curr_stage, joint_positions))
         # TODO: time-out based, we shall need a feedback loop by check states???
         msg = Float64MultiArray()
         msg.data = joint_positions
@@ -674,19 +698,21 @@ class ArUcoDemo():
         self._command_wam_arm_srv.call(joint_positions)
 
     def _ros_log_object_pose(self, t, q):
-        # convert translation to [cm]
-        t = t.copy() * 100
+        if self._verbose:
+            # convert translation to [cm]
+            t = t.copy() * 100
 
-        rot = np.array(R.from_quat(q).as_dcm()).reshape(3, 3)
-        r_vec, _ = cv2.Rodrigues(rot)
-        r_vec = r_vec * 180 / np.pi
-        r_vec = np.squeeze(np.array(r_vec)).reshape(-1)
+            rot = np.array(R.from_quat(q).as_dcm()).reshape(3, 3)
+            r_vec, _ = cv2.Rodrigues(rot)
+            r_vec = r_vec * 180 / np.pi
+            r_vec = np.squeeze(np.array(r_vec)).reshape(-1)
 
-        rospy.loginfo('')
-        rospy.loginfo('Detected arUco marker:')
-        rospy.loginfo('position     [cm]: x:{:.2f}, y:{:.2f}, z:{:.2f}'.format(t[0], t[1], t[2]))
-        rospy.loginfo('orientation [deg]: x:{:.2f}, y:{:.2f}, z:{:.2f}'.format(r_vec[0], r_vec[1], r_vec[2]))
-
+            LOG_STR = "\n \
+                Detected arUco marker: \n \
+                position     [cm]: x:{:.2f}, y:{:.2f}, z:{:.2f} \n \
+                orientation [deg]: x:{:.2f}, y:{:.2f}, z:{:.2f} \n \
+            ".format(t[0], t[1], t[2], r_vec[0], r_vec[1], r_vec[2])
+            rospy.loginfo(self._format(LOG_STR))
 
     #######################
     # Callback Functions
@@ -705,7 +731,7 @@ class ArUcoDemo():
             with self._wam_lock:
                 self._wam_request = wam_request
 
-            print(" [Summit] > Request for {}".format(wam_request))
+            print(" <-- [Summit] Request for {}".format(wam_request))
     
     def _callback_upon_zed_pose(self, object_in_camera_frame_msg):
         ### Init. ###
@@ -724,7 +750,7 @@ class ArUcoDemo():
         # orientation = np.array([w, x, y, z])
         orientation = np.array([x, y, z, w])
         # orientation = np.array([1/np.sqrt(2), 0, 1/np.sqrt(2), 0])
-        print(" [ZED] > P{} R{}".format(position, orientation))
+        self._print(info=" <-- [ZED] P{} R{}".format(position, orientation))
 
         ### Capture ###
         with self._zed_lock:
@@ -736,7 +762,6 @@ class ArUcoDemo():
 #  M A I N  #
 #===========#
 def main():
-
     rospy.init_node('barrett_trac_ik', anonymous=True)
     demo = ArUcoDemo()
     rate = rospy.Rate(10.0)
