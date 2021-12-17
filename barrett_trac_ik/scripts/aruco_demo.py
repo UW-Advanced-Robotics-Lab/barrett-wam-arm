@@ -149,7 +149,7 @@ class ArUcoDemo():
     }
 
     _IK_SEED_STATE_IC = [
-        # [0.00] * self.ik_solver.number_of_joints
+        # [0.00] * self._ik_solver.number_of_joints
         0.00010957005627754578, 0.8500968575130496, -0.00031928475261511213, 
         1.868559041954476, 0.0, -0.0006325693970662439, -0.00030823458564346445
     ]
@@ -158,7 +158,7 @@ class ArUcoDemo():
         DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE           : 50,
         DEMO_STAGE_CHOREOGRAPHY.WINGS               : 50,
         DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 50,
-        DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION       : 50,
+        DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION       : 100,
         DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION  : 50,
     }
     
@@ -247,6 +247,7 @@ class ArUcoDemo():
         ### Fetch ###
         with self._wam_lock:
             wam_request = self._wam_request
+            self._wam_request = None
         with self._zed_lock:
             position    = self._zed_position
             orientation = self._zed_orientation
@@ -384,7 +385,7 @@ class ArUcoDemo():
                 aruco_frame_wrt_camera_frame.transform.rotation.y = orientation[1]
                 aruco_frame_wrt_camera_frame.transform.rotation.z = orientation[2]
                 aruco_frame_wrt_camera_frame.transform.rotation.w = orientation[3]
-                self.transform_broadcaster.sendTransform(aruco_frame_wrt_camera_frame)
+                self._transform_broadcaster.sendTransform(aruco_frame_wrt_camera_frame)
 
                 ### Transforms from zed cam feed ###
                 time.sleep(3)
@@ -470,7 +471,7 @@ class ArUcoDemo():
                     aruco_frame_wrt_camera_frame.transform.rotation.y = orientation[1]
                     aruco_frame_wrt_camera_frame.transform.rotation.z = orientation[2]
                     aruco_frame_wrt_camera_frame.transform.rotation.w = orientation[3]
-                    self.transform_broadcaster.sendTransform(aruco_frame_wrt_camera_frame)
+                    self._transform_broadcaster.sendTransform(aruco_frame_wrt_camera_frame)
 
                     ###############################
                     # 1. capture --> before aruco #
@@ -494,7 +495,7 @@ class ArUcoDemo():
                     # aruco_frame_wrt_camera_frame.transform.rotation.y = orientation[1]
                     # aruco_frame_wrt_camera_frame.transform.rotation.z = orientation[2]
                     # aruco_frame_wrt_camera_frame.transform.rotation.w = orientation[3]
-                    # self.transform_broadcaster.sendTransform(aruco_frame_wrt_camera_frame)
+                    # self._transform_broadcaster.sendTransform(aruco_frame_wrt_camera_frame)
 
                     ### Orientation ###
                     # - Calculate required orientation for end effector:
@@ -522,7 +523,7 @@ class ArUcoDemo():
                     before_aruco_orientation = orientation
                     # before_aruco_orientation = np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)]) # perpendicular to the floor
                     print(before_aruco_position)
-                    wam_joint_states = self.ik_solver.get_ik(
+                    wam_joint_states = self._ik_solver.get_ik(
                         self._IK_SEED_STATE_IC,
                         #########################
                         before_aruco_position[0],
@@ -546,6 +547,7 @@ class ArUcoDemo():
 
                     ### Record ###
                     self._target_zed_position_after = after_position # cached towards the next stage
+                    self._target_zed_orientation_after = orientation
                 #######################  END  #######################
             else:
                 success = False
@@ -557,7 +559,7 @@ class ArUcoDemo():
             if      new_stage is DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION:
                 ####################### BEGIN #######################
                 # - cache pose locally:
-                orientation = self._target_zed_orientation
+                orientation = self._target_zed_orientation_after
                 after_position = self._target_zed_position_after
 
                 ### Compute ArUco Pressing Action:
@@ -566,7 +568,7 @@ class ArUcoDemo():
                 at_aruco_orientation = orientation
                 # at_aruco_orientation = np.array([0, 1 / np.sqrt(2), 0, 1 / np.sqrt(2)])  # perpendicular to the floor
 
-                wam_joint_states = self.ik_solver.get_ik(self._IK_SEED_STATE_IC,
+                wam_joint_states = self._ik_solver.get_ik(self._IK_SEED_STATE_IC,
                                                         #########################
                                                         at_aruco_position[0],
                                                         at_aruco_position[1],
@@ -608,8 +610,9 @@ class ArUcoDemo():
                 # - Reset Caches:
                 self._target_wam_request        = None
                 self._target_zed_position       = None
-                self._target_zed_position_after = None
                 self._target_zed_orientation    = None
+                self._target_zed_position_after       = None
+                self._target_zed_orientation_after    = None
                 #######################  END  #######################
             else:
                 success = False

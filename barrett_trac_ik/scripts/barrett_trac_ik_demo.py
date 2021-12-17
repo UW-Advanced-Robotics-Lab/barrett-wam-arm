@@ -20,7 +20,7 @@ import tf2_geometry_msgs
 import geometry_msgs.msg
 
 from geometry_msgs.msg import Pose, PoseStamped
-from std_msgs.msg import Bool, Float64MultiArray
+from std_msgs.msg import Bool, Float64MultiArray, Int8
 
 from trac_ik_python.trac_ik import IK
 
@@ -53,10 +53,9 @@ class TracIKPublisher():
         # DEMO Sub-Tasks
         #######################
 
-        self.demo_sub_tasks_summit_sub = rospy.Subscriber("/task_completion_flag_summit", Bool, self.demo_sub_tasks_callback)
-
-        self.demo_sub_tasks_summit_pub = rospy.Publisher("/task_completion_flag_wam", Bool, queue_size=1)
-        self.demo_sub_tasks_wam_pub = rospy.Publisher("/task_completion_flag_wam", Bool, queue_size=1)
+        self.demo_sub_tasks_summit_sub = rospy.Subscriber("/task_completion_flag_summit", Int8, self.demo_sub_tasks_callback)
+        self.demo_sub_tasks_summit_pub = rospy.Publisher("/task_completion_flag_wam", Int8, queue_size=1)
+        self.demo_sub_tasks_wam_pub = rospy.Publisher("/task_completion_flag_wam",Int8, queue_size=1)
 
         self.is_summit_in_position = False
 
