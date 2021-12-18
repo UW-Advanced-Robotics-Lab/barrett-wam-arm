@@ -226,14 +226,17 @@ class ArUcoDemo():
     #==================================#
     def run_100ms(self):
         """ 
-        @brief: update stage choreography per 100 [ms]
+        Update stage choreography per 100 [ms]
+
+        @return success: False if there is any failure in the stage, else True
         """
-        run_success = True
+        success = True
         new_stage = self._stage_check()
-        print("> [{}] -> [{}]".format(self._curr_stage, new_stage))
         if self._curr_stage is not new_stage:
-            run_success = self._stage_transition(new_stage = new_stage)
-        self._stage_action()
+            success &= self._stage_transition(new_stage = new_stage)
+        success &= self._stage_action()
+        
+        return success
 
     #====================================#
     #  P R I V A T E    F U N C T I O N  #
@@ -250,9 +253,12 @@ class ArUcoDemo():
     #######################
     def _stage_check(self):
         """ 
-        @brief: check stage changes and determine the new stage
+        Update parameters from input signals, and propose a new stage if necessary
+
+        @return new_stage: new stage proposal if there is a need, else return the current stage
         """
         self._logging_stage = "CHECK"
+        self._print(info="===== ===== ===== ===== ===== ===== ===== START:")
 
         ### Init ###
         new_stage = self._curr_stage
@@ -341,14 +347,19 @@ class ArUcoDemo():
         if wam_request is WAM_REQUEST.HOMING:
             new_stage = DEMO_STAGE_CHOREOGRAPHY.WINGS
         
+        # - end:
+        self._print(info="===== ===== ===== ===== ===== ===== ===== END. [return: {}]".format(new_stage))    
         return new_stage
     
 
     def _stage_transition(self, new_stage):
         """ 
-        @brief: actions based on stage transition
+        Things happen only once at the stage transition if successfully.
+
+        @return success: False if transition failed, and `self._curr_stage` would not be overridden with the `new_stage` 
         """
         self._logging_stage = "TRANSITION: [{}]->[{}]".format(self._curr_stage, new_stage)
+        self._print(info="===== ===== ===== ===== ===== ===== ===== START:")
         # init:
         success = True
         self._stage_timeout_tick_100ms = 0 # reset timeout ticks
@@ -644,14 +655,23 @@ class ArUcoDemo():
         else:
             # - stuck in stage transition
             rospy.logerr(self._format(info="Invalid Stage Transition From [{}] -x-> [{}]".format(self._curr_stage, new_stage)))
-            
+        
+        # - end:
+        self._print(info="===== ===== ===== ===== ===== ===== ===== END. [return: {}]".format(success))    
         return success
 
     def _stage_action(self):
         """ 
-        @brief: actions based on the current stage
+        Actions based on the current stage.
+
+        @return success: False if there is an error
         """
         self._logging_stage = "ACTION: [{}:{}]".format(self._curr_stage, self._stage_timeout_tick_100ms)
+        self._print(info="===== ===== ===== ===== ===== ===== ===== START:")
+
+        # - init:
+        success = True
+
         # - Boot-on / Boot-off:
         if      self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE:
             pass # Do Nothing
@@ -662,7 +682,6 @@ class ArUcoDemo():
         
         # - Reaching Pre-Captured Position:
         elif    self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.ON_STAGE:
-            # rospy.loginfo("Summit is in position for Barrett Arm operations! [REQUEST: {}]".format(self.wam_request))
             pass # END
         
         # - Reaching ArUco Marker:
@@ -678,13 +697,16 @@ class ArUcoDemo():
             rospy.logerr(self._format("Invalid Stage Transition."))
             pass # Do Nothing
         
+        # - end:
         self._stage_timeout_tick_100ms += 1
-    
+        self._print(info="===== ===== ===== ===== ===== ===== ===== END. [return: {}]".format(success))    
+        return success
+
     #######################
     # Helper Functions
     #######################
     def _pub_aruco_demo_wam_status(self, status):
-        self._print(info="[{}] *))) [trac-ik] /task_completion_flag_wam: [{}:{}]".format(self._curr_stage, status, msg.data))
+        self._print(info="[{}] *))) [trac-ik] /task_completion_flag_wam: [{}:{}]".format(self._curr_stage, status, status.value))
         msg = Int8()
         msg.data = status.value # remap request to status
         self._publisher_status.publish(msg)
