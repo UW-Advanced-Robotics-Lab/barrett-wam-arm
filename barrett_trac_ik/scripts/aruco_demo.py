@@ -71,11 +71,11 @@ class WAM_REQUEST(Enum):
 
 class WAM_STATUS(Enum):
     # Will-publish:
-    CORRIDOR_DOOR_BUTTON    =  101  #: press the door button of the corridor
-    ELEV_DOOR_BUTTON_CALL   =  102  #: press the elevator call button
-    ELEV_DOOR_BUTTON_INSIDE =  103  #: press the floor button inside the elevator
-    FAILED                  = -101  #: operation failed
-    HOMING                  =  104  #: homing
+    CORRIDOR_DOOR_BUTTON    =  1  #: press the door button of the corridor
+    ELEV_DOOR_BUTTON_CALL   =  2  #: press the elevator call button
+    ELEV_DOOR_BUTTON_INSIDE =  3  #: press the floor button inside the elevator
+    FAILED                  = -1  #: operation failed
+    HOMING                  =  4  #: homing
 
 class DEMO_STAGE_CHOREOGRAPHY(Enum):
     """ Demo Choreography Stage Enums
@@ -84,11 +84,12 @@ class DEMO_STAGE_CHOREOGRAPHY(Enum):
 
         @NOTE: [stage terms](https://medium.com/the-improv-blog/7-basic-stage-terms-for-improvisers-590870cf08a5)
     """
-    OFF_STAGE           = 0
-    WINGS               = 1 # "at Home"
-    ON_STAGE            = 2 # "at Capture": at pre-capture joint positions
-    IMPROVISATION       = 3 # "before pressing ArUco": live action based on zed-camera
-    POST_IMPROVISATION  = 4 # "pressing ArUco": live action based on zed-camera
+    OFF_STAGE           = 0 # "Initial/unknown stage"
+    WINDING             = 1 # "Homing"
+    WINGS               = 2 # "at Home"
+    ON_STAGE            = 3 # "at Capture": at pre-capture joint positions
+    IMPROVISATION       = 4 # "before pressing ArUco": live action based on zed-camera
+    POST_IMPROVISATION  = 5 # "pressing ArUco": live action based on zed-camera
 
 class ArUcoDemo():
     #===================#
@@ -128,11 +129,11 @@ class ArUcoDemo():
     }
 
     _LUT_REQUEST_CONST_PARAMS = {
-        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : None,
-        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : None,
-        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : None,
-        WAM_REQUEST.FAILED                  : None,
-        WAM_REQUEST.HOMING                  : None,
+        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"button_press_norm_dist_factor": 0.010},
+        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"button_press_norm_dist_factor": 0.010},
+        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"button_press_norm_dist_factor": 0.040},
+        WAM_REQUEST.FAILED                  : {"button_press_norm_dist_factor": 0.125},
+        WAM_REQUEST.HOMING                  : {"button_press_norm_dist_factor": 0.125},
     }
 
     _WAM_JOINT_IDs = {
@@ -156,10 +157,11 @@ class ArUcoDemo():
 
     _STAGE_TIME_OUT_100MS = {
         DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE           : 50,
-        DEMO_STAGE_CHOREOGRAPHY.WINGS               : 50,
-        DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 50,
-        DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION       : 100,
-        DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION  : 50,
+        DEMO_STAGE_CHOREOGRAPHY.WINDING             : 50,
+        DEMO_STAGE_CHOREOGRAPHY.WINGS               : 0,
+        DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 80,
+        DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION       : 60,
+        DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION  : 30,
     }
     
     #===============================#
@@ -169,7 +171,7 @@ class ArUcoDemo():
         #######################
         # Debugger:
         #######################
-        self._verbose = False   # disable extra text prints
+        self._verbose = True   # disable extra text prints
         self._logging_stage = "Init"    # stage tracking
 
         #######################
@@ -213,13 +215,15 @@ class ArUcoDemo():
         self._zed_orientation   = None
         
         # non-thread cache placeholder
-        self._target_wam_request        = None
-        self._target_zed_position       = None
-        self._target_zed_position_after = None
-        self._target_zed_orientation    = None
-
-        self._stage_timeout_tick_100ms = 0
-
+        self._target_wam_request                = None
+        self._target_zed_position               = None
+        self._target_zed_position_after         = None
+        self._target_zed_orientation            = None
+        self._target_zed_orientation_after      = None
+        
+        self._stage_timeout_tick_100ms          = 0
+        self._prev_transition_success           = True
+        self._flag_fail_to_perform_the_request  = False
 
     #==================================#
     #  P U B L I C    F U N C T I O N  #
@@ -232,10 +236,21 @@ class ArUcoDemo():
         """
         success = True
         new_stage = self._stage_check()
+
         if self._curr_stage is not new_stage:
             success &= self._stage_transition(new_stage = new_stage)
-        success &= self._stage_action()
+            if success:
+                self._stage_timeout_tick_100ms = 0 # reset timeout ticks
+            else:
+                pass # re-attempt, till time-out
         
+        # log success till this step:
+        self._prev_transition_success = success
+
+        # only perform current action, if no faults so far
+        if success:
+            success &= self._stage_action()
+
         return success
 
     #====================================#
@@ -283,12 +298,14 @@ class ArUcoDemo():
                 self._ros_log_object_pose(t=position, q=orientation)
 
         ### Determine A New Stage ###
+        # - stages that are locked:
         if self._curr_stage in [
                 # - wait for system auto booting
                 None,
                 DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE,
+                # - wait for system homing
+                DEMO_STAGE_CHOREOGRAPHY.WINDING,
                 # - Do not interrupt the show, wait for completion!
-                DEMO_STAGE_CHOREOGRAPHY.ON_STAGE,
                 DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION,
                 DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION
             ]:
@@ -296,26 +313,44 @@ class ArUcoDemo():
         # - a new request while no show has been started (aka. only in homing position):
         elif self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.WINGS:
             if wam_request not in [None, WAM_REQUEST.FAILED]:
-                if self._target_wam_request != wam_request:
+                if self._target_wam_request != wam_request: 
                     self._print(info="New command ({}) has been accepted from SUMMIT!".format(wam_request))
                     self._target_wam_request = wam_request
                     new_stage = DEMO_STAGE_CHOREOGRAPHY.ON_STAGE
                 else:
-                    self._print(info="Discard the repeated command received from SUMMIT!")
+                    rospy.logerr(self._format(info="Discard the repeated command received from SUMMIT!"))
             else:
-                self._print(info="No command has been received from SUMMIT!")
-
+                rospy.logwarn(self._format(info="No command has been received from SUMMIT!"))
+        # re-try with new up-dated aruco position if the previously captured was not valid
+        elif self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.ON_STAGE \
+            and not self._prev_transition_success: 
+            if position is not None and orientation is not None:
+                self._target_zed_position    = position
+                self._target_zed_orientation = orientation
+                new_stage = DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION
+    
         ### Timeout Overrides ###
         if self._stage_timeout_tick_100ms > self._STAGE_TIME_OUT_100MS[self._curr_stage]:
 
-            # - [Time-out] Booted-on / Booted-off:
-            if      self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE:
-                new_stage = DEMO_STAGE_CHOREOGRAPHY.WINGS # By Default, enter the wings stage
+            if  self._prev_transition_success is not True:
+                new_stage = DEMO_STAGE_CHOREOGRAPHY.WINDING # Abort, and go homing, if run failed, and timed-out
+                self._flag_fail_to_perform_the_request = True
                 pass # END
 
+            # - [Time-out] Booted-on / Booted-off:
+            elif      self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE:
+                new_stage = DEMO_STAGE_CHOREOGRAPHY.WINDING # By Default, enter the winding stage to the home position
+                pass # END
+
+            # - [Time-out] Homing:
+            elif    self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.WINDING:
+                # Note: Time-out buffer for the homing in progress
+                new_stage = DEMO_STAGE_CHOREOGRAPHY.WINGS # By Default, enter the wings stage
+                pass # END
+            
             # - [Time-out] Initialized at Homing Position:
             elif    self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.WINGS:
-                # DO NOTHING, Note: No time-out for the homing stage
+                # DO NOTHING, Note: No time-out for the homed stage
                 pass # END
             
             # - [Time-out] Reached Pre-Captured Position:
@@ -345,7 +380,7 @@ class ArUcoDemo():
 
         ### Homing CMD Override ###
         if wam_request is WAM_REQUEST.HOMING:
-            new_stage = DEMO_STAGE_CHOREOGRAPHY.WINGS
+            new_stage = DEMO_STAGE_CHOREOGRAPHY.WINDING # entering winding to perform homing
         
         # - end:
         self._print(info="===== ===== ===== ===== ===== ===== ===== END. [return: {}]".format(new_stage))    
@@ -362,21 +397,45 @@ class ArUcoDemo():
         self._print(info="===== ===== ===== ===== ===== ===== ===== START:")
         # init:
         success = True
-        self._stage_timeout_tick_100ms = 0 # reset timeout ticks
         ### Action ###
         ###################################
         # -> Homing Override:
-        if          new_stage is DEMO_STAGE_CHOREOGRAPHY.WINGS:
+        if          new_stage is DEMO_STAGE_CHOREOGRAPHY.WINDING:
             ####################### BEGIN #######################
+            # - Homing (only in this stage):
             self._send_barrett_to_joint_positions_non_block(self._LUT_CAPTURED_JOINT_POSITIONS[WAM_REQUEST.HOMING])
             #######################  END  #######################
+        
+        ###################################
+        # -> Homed:
+        elif          new_stage is DEMO_STAGE_CHOREOGRAPHY.WINGS:
+            ####################### BEGIN #######################
+            if self._target_wam_request is WAM_REQUEST.HOMING:
+                pass # do not report, if it was explicitly commanded to do homing
+            else:
+                # - Report Status (Once):
+                status = WAM_STATUS[self._target_wam_request.name] 
+                if self._flag_fail_to_perform_the_request:
+                    status = WAM_STATUS.FAILED
+
+                self._pub_aruco_demo_wam_status(status = status)
+
+            # - Reset Caches:
+            self._flag_fail_to_perform_the_request  = False
+            self._target_wam_request                = None
+            self._target_zed_position               = None
+            self._target_zed_orientation            = None
+            self._target_zed_position_after         = None
+            self._target_zed_orientation_after      = None
+            #######################  END  #######################
+
         ###################################
         # - Booted-on / Booted-off:
         elif      self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE:
             # -> Homing Once:
-            if      new_stage is DEMO_STAGE_CHOREOGRAPHY.WINGS:
+            if      new_stage is DEMO_STAGE_CHOREOGRAPHY.WINDING:
                 ####################### BEGIN #######################
-                self._send_barrett_to_joint_positions_non_block(self._LUT_CAPTURED_JOINT_POSITIONS[WAM_REQUEST.HOMING])
+                pass # Do Nothing, make sure it only goes to winding
                 #######################  END  #######################
             else:
                 success = False
@@ -481,8 +540,9 @@ class ArUcoDemo():
                     self._print(info="[Original] Normal Dir: {}".format(normal_dir))
                     # before_position = position.copy()
                     # position[2] += 0.025
+                    factor_post_norm = self._LUT_REQUEST_CONST_PARAMS[target]["button_press_norm_dist_factor"]
                     before_position = position + 0.25 * normal_dir
-                    after_position = position + 0.125 * normal_dir
+                    after_position = position + factor_post_norm * normal_dir
                     self._print(info="[Offsetted] Before position: {}, After position: {}".format(before_position, position))
 
 
@@ -627,20 +687,9 @@ class ArUcoDemo():
         # - Pressed ArUco Marker:
         elif    self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION:
             # -> Invoke to home, end of the choreography
-            if      new_stage is DEMO_STAGE_CHOREOGRAPHY.WINGS:
+            if      new_stage is DEMO_STAGE_CHOREOGRAPHY.WINDING:
                 ####################### BEGIN #######################
-                # - HOMING:
-                self._send_barrett_to_joint_positions_non_block(self._LUT_CAPTURED_JOINT_POSITIONS[WAM_REQUEST.HOMING])
-
-                # - Report Status (Once):
-                self._pub_aruco_demo_wam_status(status = WAM_STATUS[self._target_wam_request.name])
-
-                # - Reset Caches:
-                self._target_wam_request           = None
-                self._target_zed_position          = None
-                self._target_zed_orientation       = None
-                self._target_zed_position_after    = None
-                self._target_zed_orientation_after = None
+                pass # do nothing
                 #######################  END  #######################
             else:
                 success = False
@@ -662,7 +711,7 @@ class ArUcoDemo():
 
     def _stage_action(self):
         """ 
-        Actions based on the current stage.
+        Actions based on the current stage. [Note: Currently doing nothing]
 
         @return success: False if there is an error
         """
@@ -706,7 +755,7 @@ class ArUcoDemo():
     # Helper Functions
     #######################
     def _pub_aruco_demo_wam_status(self, status):
-        self._print(info="[{}] *))) [trac-ik] /task_completion_flag_wam: [{}:{}]".format(self._curr_stage, status, status.value))
+        rospy.logwarn(self._format(info="[{}] *))) [trac-ik] /task_completion_flag_wam: [{}:{}]".format(self._curr_stage, status, status.value)))
         msg = Int8()
         msg.data = status.value # remap request to status
         self._publisher_status.publish(msg)
