@@ -156,7 +156,7 @@ class ArUcoDemo():
     ]
 
     _STAGE_TIME_OUT_100MS = {
-        DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE           : 50,
+        DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE           : 10,
         DEMO_STAGE_CHOREOGRAPHY.WINDING             : 50,
         DEMO_STAGE_CHOREOGRAPHY.WINGS               : 0,
         DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 80,
@@ -410,7 +410,7 @@ class ArUcoDemo():
         # -> Homed:
         elif          new_stage is DEMO_STAGE_CHOREOGRAPHY.WINGS:
             ####################### BEGIN #######################
-            if self._target_wam_request is WAM_REQUEST.HOMING:
+            if self._target_wam_request in [WAM_REQUEST.HOMING, None]:
                 pass # do not report, if it was explicitly commanded to do homing
             else:
                 # - Report Status (Once):
@@ -725,6 +725,10 @@ class ArUcoDemo():
         if      self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE:
             pass # Do Nothing
 
+        # - Homing:
+        elif    self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.WINDING:
+            pass # END
+        
         # - Initialize at Homing Position:
         elif    self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.WINGS:
             pass # END
@@ -743,7 +747,7 @@ class ArUcoDemo():
         
         # - Unknown:
         else:
-            rospy.logerr(self._format("Invalid Stage Transition."))
+            rospy.logerr(self._format("Invalid Stage Action."))
             pass # Do Nothing
         
         # - end:
