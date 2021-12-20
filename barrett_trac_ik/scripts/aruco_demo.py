@@ -129,9 +129,9 @@ class ArUcoDemo():
     }
 
     _LUT_REQUEST_CONST_PARAMS = {
-        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"button_press_norm_dist_factor": 0.010},
-        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"button_press_norm_dist_factor": 0.010},
-        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"button_press_norm_dist_factor": 0.040},
+        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"aruco_x_dir_offset": 0, "aruco_y_dir_offset": -0.110, "button_press_norm_dist_factor": 0.115, "time_out_improvisation": 70, "time_out_post_improvisation": 50},
+        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"aruco_x_dir_offset": 0, "aruco_y_dir_offset": -0.177, "button_press_norm_dist_factor": 0.120, "time_out_improvisation": 50, "time_out_post_improvisation": 30},
+        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset": 0, "aruco_y_dir_offset":      0, "button_press_norm_dist_factor": 0.125, "time_out_improvisation": 50, "time_out_post_improvisation": 30},
         WAM_REQUEST.FAILED                  : {"button_press_norm_dist_factor": 0.125},
         WAM_REQUEST.HOMING                  : {"button_press_norm_dist_factor": 0.125},
     }
@@ -159,9 +159,9 @@ class ArUcoDemo():
         DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE           : 10,
         DEMO_STAGE_CHOREOGRAPHY.WINDING             : 50,
         DEMO_STAGE_CHOREOGRAPHY.WINGS               : 0,
-        DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 80,
-        DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION       : 60,
-        DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION  : 30,
+        DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 60,
+        DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION       : 70, # default
+        DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION  : 50, # default
     }
     
     #===============================#
@@ -171,7 +171,7 @@ class ArUcoDemo():
         #######################
         # Debugger:
         #######################
-        self._verbose = True   # disable extra text prints
+        self._verbose = False   # disable extra text prints
         self._logging_stage = "Init"    # stage tracking
 
         #######################
@@ -314,7 +314,7 @@ class ArUcoDemo():
         elif self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.WINGS:
             if wam_request not in [None, WAM_REQUEST.FAILED]:
                 if self._target_wam_request != wam_request: 
-                    self._print(info="New command ({}) has been accepted from SUMMIT!".format(wam_request))
+                    rospy.loginfo(self._format(info="New command ({}) has been accepted from SUMMIT!".format(wam_request)))
                     self._target_wam_request = wam_request
                     new_stage = DEMO_STAGE_CHOREOGRAPHY.ON_STAGE
                 else:
@@ -330,7 +330,21 @@ class ArUcoDemo():
                 new_stage = DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION
     
         ### Timeout Overrides ###
-        if self._stage_timeout_tick_100ms > self._STAGE_TIME_OUT_100MS[self._curr_stage]:
+        # Task specific tuned timeout:
+        time_out_100ms = self._STAGE_TIME_OUT_100MS[self._curr_stage]
+        if self._curr_stage in [
+                # - Task specific time-out
+                DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION,
+                DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION
+            ]:
+                if self._target_wam_request is not None:
+                    LUT = self._LUT_REQUEST_CONST_PARAMS[self._target_wam_request]
+                    if "time_out_improvisation" in LUT and self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION:
+                        time_out_100ms = LUT["time_out_improvisation"]
+                    elif "time_out_post_improvisation" in LUT and self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION:
+                        time_out_100ms = LUT["time_out_post_improvisation"]
+        # timeout action:
+        if self._stage_timeout_tick_100ms > time_out_100ms:
 
             if  self._prev_transition_success is not True:
                 new_stage = DEMO_STAGE_CHOREOGRAPHY.WINDING # Abort, and go homing, if run failed, and timed-out
@@ -370,7 +384,7 @@ class ArUcoDemo():
             
             # - [Time-out] Pressed ArUco Marker:
             elif    self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION:
-                new_stage = DEMO_STAGE_CHOREOGRAPHY.WINGS
+                new_stage = DEMO_STAGE_CHOREOGRAPHY.WINDING
                 pass # Do Nothing
             
             # - Unknown:
@@ -394,7 +408,7 @@ class ArUcoDemo():
         @return success: False if transition failed, and `self._curr_stage` would not be overridden with the `new_stage` 
         """
         self._logging_stage = "TRANSITION: [{}]->[{}]".format(self._curr_stage, new_stage)
-        self._print(info="===== ===== ===== ===== ===== ===== ===== START:")
+        rospy.logwarn(self._format(info="===== ===== ===== ===== ===== ===== ===== START:"))
         # init:
         success = True
         ### Action ###
@@ -528,14 +542,8 @@ class ArUcoDemo():
                     tag_x_axis_dir = R.from_quat(orientation).apply(x_axis)
                     tag_y_axis_dir = R.from_quat(orientation).apply(y_axis)
 
-                    if target is WAM_REQUEST.ELEV_DOOR_BUTTON_CALL:
-                        # NOTE: Next two lines are for the elevator (outside) only (comment out for other locations)
-                        position += -0.017 * tag_x_axis_dir
-                        position += -0.177 * tag_y_axis_dir
-                    elif target is WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE:    
-                        # NOTE: Next two lines are for the elevator (inside) only (comment out for other locations)
-                        position += 0.02 * tag_y_axis_dir
-                        position += -0.11 * tag_x_axis_dir
+                    position += self._LUT_REQUEST_CONST_PARAMS[target]["aruco_x_dir_offset"] * tag_x_axis_dir
+                    position += self._LUT_REQUEST_CONST_PARAMS[target]["aruco_y_dir_offset"] * tag_y_axis_dir
 
                     self._print(info="[Original] Normal Dir: {}".format(normal_dir))
                     # before_position = position.copy()
@@ -706,7 +714,7 @@ class ArUcoDemo():
             rospy.logerr(self._format(info="Invalid Stage Transition From [{}] -x-> [{}]".format(self._curr_stage, new_stage)))
         
         # - end:
-        self._print(info="===== ===== ===== ===== ===== ===== ===== END. [return: {}]".format(success))    
+        rospy.logwarn(self._format(info="===== ===== ===== ===== ===== ===== ===== END. [return: {}]".format(success)))    
         return success
 
     def _stage_action(self):
@@ -806,7 +814,7 @@ class ArUcoDemo():
             with self._wam_lock:
                 self._wam_request = wam_request
 
-            print(" <-- [Summit] Request for {}".format(wam_request))
+            self._print(info=" <-- [Summit] Request for {}".format(wam_request))
     
     def _callback_upon_zed_pose(self, object_in_camera_frame_msg):
         ### Init. ###
