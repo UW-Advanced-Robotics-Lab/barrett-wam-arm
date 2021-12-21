@@ -129,9 +129,9 @@ class ArUcoDemo():
     }
 
     _LUT_REQUEST_CONST_PARAMS = {
-        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"aruco_x_dir_offset": 0, "aruco_y_dir_offset": -0.110, "button_press_norm_dist_factor": 0.115, "time_out_improvisation": 70, "time_out_post_improvisation": 50},
+        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"aruco_x_dir_offset": 0.04, "aruco_y_dir_offset": -0.180, "button_press_norm_dist_factor": 0.130, "time_out_improvisation": 70, "time_out_post_improvisation": 50},
         WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"aruco_x_dir_offset": 0, "aruco_y_dir_offset": -0.177, "button_press_norm_dist_factor": 0.120, "time_out_improvisation": 50, "time_out_post_improvisation": 30},
-        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset": 0, "aruco_y_dir_offset":      0, "button_press_norm_dist_factor": 0.125, "time_out_improvisation": 50, "time_out_post_improvisation": 30},
+        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset": 0, "aruco_y_dir_offset":      0, "button_press_norm_dist_factor": 0.100, "time_out_improvisation": 60, "time_out_post_improvisation": 50},
         WAM_REQUEST.FAILED                  : {"button_press_norm_dist_factor": 0.125},
         WAM_REQUEST.HOMING                  : {"button_press_norm_dist_factor": 0.125},
     }
