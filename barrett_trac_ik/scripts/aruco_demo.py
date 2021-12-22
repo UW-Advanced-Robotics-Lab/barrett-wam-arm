@@ -132,7 +132,7 @@ class ArUcoDemo():
     _LUT_REQUEST_CONST_PARAMS = {
         WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"aruco_x_dir_offset": 0.04, "aruco_y_dir_offset": -0.180, "button_press_norm_dist_factor": 0.130, "time_out_improvisation": 70, "time_out_post_improvisation": 50},
         WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"aruco_x_dir_offset": 0, "aruco_y_dir_offset": -0.177, "button_press_norm_dist_factor": 0.120, "time_out_improvisation": 50, "time_out_post_improvisation": 30},
-        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset": 0, "aruco_y_dir_offset":      0, "button_press_norm_dist_factor": 0.100, "time_out_improvisation": 60, "time_out_post_improvisation": 50},
+        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset": 0, "aruco_y_dir_offset":      0, "button_press_norm_dist_factor": 0.100, "time_out_improvisation": 60, "time_out_post_improvisation": 40},
         WAM_REQUEST.FAILED                  : {"button_press_norm_dist_factor": 0.125},
         WAM_REQUEST.HOMING                  : {"button_press_norm_dist_factor": 0.125},
     }
@@ -158,12 +158,12 @@ class ArUcoDemo():
 
     _STAGE_TIME_OUT_100MS = {
         DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE           : 10,
-        DEMO_STAGE_CHOREOGRAPHY.WINDING             : 50,
-        DEMO_STAGE_CHOREOGRAPHY.WINGS               : 0,
-        DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 35,
+        DEMO_STAGE_CHOREOGRAPHY.WINDING             : 35,
+        DEMO_STAGE_CHOREOGRAPHY.WINGS               : 10,
+        DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 25,
         DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION       : 70, # default
         DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION  : 50, # default
-        DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION    : 5,
+        DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION    : 20,
     }
     
     #===============================#
@@ -219,9 +219,10 @@ class ArUcoDemo():
         # non-thread cache placeholder
         self._target_wam_request                = None
         self._target_zed_position               = None
-        self._target_aruco_position_after         = None
+        self._target_aruco_position_after       = None
         self._target_zed_orientation            = None
-        self._target_aruco_orientation_after      = None
+        self._target_aruco_orientation_after    = None
+        self._target_aruco_pose_before          = None
         
         self._stage_timeout_tick_100ms          = 0
         self._prev_transition_success           = True
@@ -446,9 +447,10 @@ class ArUcoDemo():
             self._flag_fail_to_perform_the_request  = False
             self._target_wam_request                = None
             self._target_zed_position               = None
+            self._target_aruco_position_after       = None
             self._target_zed_orientation            = None
-            self._target_aruco_position_after         = None
-            self._target_aruco_orientation_after      = None
+            self._target_aruco_orientation_after    = None
+            self._target_aruco_pose_before          = None
             #######################  END  #######################
 
         ###################################
@@ -657,8 +659,7 @@ class ArUcoDemo():
                     # - cached towards the next stage
                     self._target_aruco_position_after = after_position 
                     self._target_aruco_orientation_after = orientation
-                    self._target_aruco_position_before = before_aruco_position
-                    self._target_aruco_orientation_before = orientation
+                    self._target_aruco_pose_before = wam_joint_states
                 #######################  END  #######################
             else:
                 success = False
@@ -708,30 +709,11 @@ class ArUcoDemo():
             # -> Invoke to release the button
             if      new_stage is DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION:
                 ####################### BEGIN #######################
-                # - cache pose locally:
-                orientation = self._target_aruco_orientation_before
-                before_aruco_position = self._target_aruco_position_before
-
-                ### Compute ArUco Pressing Action:
-                wam_joint_states = self._ik_solver.get_ik(self._IK_SEED_STATE_IC,
-                                                        #########################
-                                                        before_aruco_position[0],
-                                                        before_aruco_position[1],
-                                                        before_aruco_position[2],
-                                                        orientation[0],
-                                                        orientation[1],
-                                                        orientation[2],
-                                                        orientation[3],
-                                                        #########################
-                                                        # brx=0.5, bry=0.5, brz=0.5
-                                                        )
-
-                wam_joint_states = np.array(wam_joint_states, dtype=float).reshape(-1).tolist()
-                if len(wam_joint_states) == 1:
+                if len(self._target_aruco_pose_before) == 1:
                     rospy.logwarn(self._format(info="(Releasing ArUco Marker) IK solver failed !!"))
                     success = False
                 else:
-                    self._send_barrett_to_joint_positions_non_block(wam_joint_states)
+                    self._send_barrett_to_joint_positions_non_block(self._target_aruco_pose_before)
                 #######################  END  #######################
             else:
                 success = False
