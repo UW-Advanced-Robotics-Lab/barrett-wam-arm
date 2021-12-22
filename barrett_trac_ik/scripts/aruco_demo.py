@@ -90,6 +90,7 @@ class DEMO_STAGE_CHOREOGRAPHY(Enum):
     ON_STAGE            = 3 # "at Capture": at pre-capture joint positions
     IMPROVISATION       = 4 # "before pressing ArUco": live action based on zed-camera
     POST_IMPROVISATION  = 5 # "pressing ArUco": live action based on zed-camera
+    RE_IMPROVISATION    = 6 # back to "before pressing ArUco", release pressure
 
 class ArUcoDemo():
     #===================#
@@ -159,9 +160,10 @@ class ArUcoDemo():
         DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE           : 10,
         DEMO_STAGE_CHOREOGRAPHY.WINDING             : 50,
         DEMO_STAGE_CHOREOGRAPHY.WINGS               : 0,
-        DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 60,
+        DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 35,
         DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION       : 70, # default
         DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION  : 50, # default
+        DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION    : 5,
     }
     
     #===============================#
@@ -217,9 +219,9 @@ class ArUcoDemo():
         # non-thread cache placeholder
         self._target_wam_request                = None
         self._target_zed_position               = None
-        self._target_zed_position_after         = None
+        self._target_aruco_position_after         = None
         self._target_zed_orientation            = None
-        self._target_zed_orientation_after      = None
+        self._target_aruco_orientation_after      = None
         
         self._stage_timeout_tick_100ms          = 0
         self._prev_transition_success           = True
@@ -307,7 +309,8 @@ class ArUcoDemo():
                 DEMO_STAGE_CHOREOGRAPHY.WINDING,
                 # - Do not interrupt the show, wait for completion!
                 DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION,
-                DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION
+                DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION,
+                DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION
             ]:
             pass
         # - a new request while no show has been started (aka. only in homing position):
@@ -384,6 +387,11 @@ class ArUcoDemo():
             
             # - [Time-out] Pressed ArUco Marker:
             elif    self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION:
+                new_stage = DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION
+                pass # Do Nothing
+            
+            # - [Time-out] Released ArUco Marker:
+            elif    self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION:
                 new_stage = DEMO_STAGE_CHOREOGRAPHY.WINDING
                 pass # Do Nothing
             
@@ -439,8 +447,8 @@ class ArUcoDemo():
             self._target_wam_request                = None
             self._target_zed_position               = None
             self._target_zed_orientation            = None
-            self._target_zed_position_after         = None
-            self._target_zed_orientation_after      = None
+            self._target_aruco_position_after         = None
+            self._target_aruco_orientation_after      = None
             #######################  END  #######################
 
         ###################################
@@ -640,14 +648,17 @@ class ArUcoDemo():
 
                     wam_joint_states = np.array(wam_joint_states, dtype=float).reshape(-1).tolist()
                     if len(wam_joint_states) == 1:
-                        rospy.logwarn(self._format(info="IK solver failed !!"))
+                        rospy.logwarn(self._format(info="(Moving to ArUco Marker) IK solver failed !!"))
                         success = False
                     else:
                         self._send_barrett_to_joint_positions_non_block(wam_joint_states)
 
                     ### Record ###
-                    self._target_zed_position_after = after_position # cached towards the next stage
-                    self._target_zed_orientation_after = orientation
+                    # - cached towards the next stage
+                    self._target_aruco_position_after = after_position 
+                    self._target_aruco_orientation_after = orientation
+                    self._target_aruco_position_before = before_aruco_position
+                    self._target_aruco_orientation_before = orientation
                 #######################  END  #######################
             else:
                 success = False
@@ -659,8 +670,8 @@ class ArUcoDemo():
             if      new_stage is DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION:
                 ####################### BEGIN #######################
                 # - cache pose locally:
-                orientation = self._target_zed_orientation_after
-                after_position = self._target_zed_position_after
+                orientation = self._target_aruco_orientation_after
+                after_position = self._target_aruco_position_after
 
                 ### Compute ArUco Pressing Action:
                 at_aruco_position = after_position.copy()
@@ -683,7 +694,7 @@ class ArUcoDemo():
 
                 wam_joint_states = np.array(wam_joint_states, dtype=float).reshape(-1).tolist()
                 if len(wam_joint_states) == 1:
-                    rospy.logwarn(self._format(info="IK solver failed !!"))
+                    rospy.logwarn(self._format(info="(Pressing ArUco Marker) IK solver failed !!"))
                     success = False
                 else:
                     self._send_barrett_to_joint_positions_non_block(wam_joint_states)
@@ -694,6 +705,40 @@ class ArUcoDemo():
         ###################################
         # - Pressed ArUco Marker:
         elif    self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION:
+            # -> Invoke to release the button
+            if      new_stage is DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION:
+                ####################### BEGIN #######################
+                # - cache pose locally:
+                orientation = self._target_aruco_orientation_before
+                before_aruco_position = self._target_aruco_position_before
+
+                ### Compute ArUco Pressing Action:
+                wam_joint_states = self._ik_solver.get_ik(self._IK_SEED_STATE_IC,
+                                                        #########################
+                                                        before_aruco_position[0],
+                                                        before_aruco_position[1],
+                                                        before_aruco_position[2],
+                                                        orientation[0],
+                                                        orientation[1],
+                                                        orientation[2],
+                                                        orientation[3],
+                                                        #########################
+                                                        # brx=0.5, bry=0.5, brz=0.5
+                                                        )
+
+                wam_joint_states = np.array(wam_joint_states, dtype=float).reshape(-1).tolist()
+                if len(wam_joint_states) == 1:
+                    rospy.logwarn(self._format(info="(Releasing ArUco Marker) IK solver failed !!"))
+                    success = False
+                else:
+                    self._send_barrett_to_joint_positions_non_block(wam_joint_states)
+                #######################  END  #######################
+            else:
+                success = False
+        
+        ###################################
+        # - Released ArUco Marker:
+        elif    self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION:
             # -> Invoke to home, end of the choreography
             if      new_stage is DEMO_STAGE_CHOREOGRAPHY.WINDING:
                 ####################### BEGIN #######################
@@ -701,6 +746,8 @@ class ArUcoDemo():
                 #######################  END  #######################
             else:
                 success = False
+        
+        ###################################
         # - Unknown:
         else:
             success = False
@@ -751,6 +798,10 @@ class ArUcoDemo():
         
         # - Pressing ArUco Marker:
         elif    self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION:
+            pass # Do Nothing
+        
+        # - Releasing ArUco Marker:
+        elif    self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION:
             pass # Do Nothing
         
         # - Unknown:
