@@ -606,7 +606,7 @@ class ArUcoDemo():
                     # aruco_frame_wrt_camera_frame.transform.rotation.w = orientation[3]
                     # self._transform_broadcaster.sendTransform(aruco_frame_wrt_camera_frame)
 
-                    ### Orientation ###
+                    ### Orientation ### TODO: implement based on the normal of the aruco marker instead of hard code
                     # - Calculate required orientation for end effector:
                     # - (For elevator button)
                     if target in [WAM_REQUEST.ELEV_DOOR_BUTTON_CALL, WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE]:
