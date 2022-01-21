@@ -341,12 +341,13 @@ class ArUcoDemo():
                 DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION,
                 DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION
             ]:
-                if self._target_wam_request is not None:
-                    LUT = self._LUT_REQUEST_CONST_PARAMS[self._target_wam_request]
-                    if "time_out_improvisation" in LUT and self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION:
-                        time_out_100ms = LUT["time_out_improvisation"]
-                    elif "time_out_post_improvisation" in LUT and self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION:
-                        time_out_100ms = LUT["time_out_post_improvisation"]
+            if self._target_wam_request is not None:
+                LUT = self._LUT_REQUEST_CONST_PARAMS[self._target_wam_request]
+                if "time_out_improvisation" in LUT and self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION:
+                    time_out_100ms = LUT["time_out_improvisation"]
+                elif "time_out_post_improvisation" in LUT and self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION:
+                    time_out_100ms = LUT["time_out_post_improvisation"]
+        
         # timeout action:
         if self._stage_timeout_tick_100ms > time_out_100ms:
 
