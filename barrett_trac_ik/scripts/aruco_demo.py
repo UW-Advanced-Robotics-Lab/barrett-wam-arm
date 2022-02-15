@@ -8,6 +8,7 @@
 
 # python libraries:
 from __future__ import division
+from ntpath import join
 
 import os
 import sys
@@ -31,8 +32,8 @@ import tf2_geometry_msgs
 import geometry_msgs.msg
 
 from sensor_msgs.msg import JointState
-from geometry_msgs.msg import Pose, PoseStamped, TransformStamped
-from std_msgs.msg import Bool, Float64MultiArray, Int8, Header, Point, Quaternion
+from geometry_msgs.msg import PoseStamped, TransformStamped, Vector3, Quaternion, Transform
+from std_msgs.msg import Bool, Float64MultiArray, Int8, Header
 
 ROOT_DIR = '/home/akeaveny/catkin_ws/src/barrett_trac_ik/'
 sys.path.append(ROOT_DIR)
@@ -97,6 +98,8 @@ class ArUcoDemo():
     #===================#
     #  C O N S T A N T  #
     #===================#
+    ### Config ###
+    _JOINT_POSITION_TOL = 0.020
     ### Look up table for pre-calibrated joint-positions ###
     _LUT_CAPTURED_JOINT_POSITIONS = {
         WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : [    
@@ -173,12 +176,12 @@ class ArUcoDemo():
 
     _STAGE_TIME_OUT_100MS = {
         DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE           : 10,
-        DEMO_STAGE_CHOREOGRAPHY.WINDING             : 35,
-        DEMO_STAGE_CHOREOGRAPHY.WINGS               : 10,
-        DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 25,
-        DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION       : 70, # default
-        DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION  : 50, # default
-        DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION    : 20,
+        DEMO_STAGE_CHOREOGRAPHY.WINDING             : 100,#35,
+        DEMO_STAGE_CHOREOGRAPHY.WINGS               : 100,#10,
+        DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 100,#25,
+        DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION       : 100,#70, # default
+        DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION  : 100,#50, # default
+        DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION    : 100,#20,
     }
     
     # Measurements of ZED to forearm link in world coords. TODO: make it some sort of const. 
@@ -189,12 +192,11 @@ class ArUcoDemo():
     _CONST_POSES_IN_WORLD_COORD = {
         "zed_link_frame": TransformStamped(
             header=Header(
-                stamp=rospy.Time.now(), 
                 frame_id=_WAM_JOINT_IDs["forearm_link_frame"]
             ), 
             child_frame_id=_WAM_JOINT_IDs["zed_link_frame"],
-            pose=Pose(
-                translation = Point(
+            transform=Transform(
+                translation = Vector3(
                     _CONST_OFFSET_TO_LET_ZED_LENS_X_AXIS,
                     _CONST_OFFSET_TO_LET_ZED_LENS_Y_AXIS,
                     0
@@ -209,12 +211,11 @@ class ArUcoDemo():
         ),
         "camera_link_frame": TransformStamped(
             header=Header(
-                stamp=rospy.Time.now(), 
                 frame_id=_WAM_JOINT_IDs["forearm_link_frame"]
             ), 
             child_frame_id=_WAM_JOINT_IDs["camera_link_frame"],
-            pose=Pose(
-                translation = Point(
+            transform=Transform(
+                translation = Vector3(
                     _CONST_OFFSET_TO_LET_ZED_LENS_X_AXIS,
                     _CONST_OFFSET_TO_LET_ZED_LENS_Y_AXIS,
                     _CONST_OFFSET_TO_LET_ZED_LENS_Z_AXIS,
@@ -282,7 +283,7 @@ class ArUcoDemo():
         self._zed_position      = None
         self._zed_orientation   = None
         self._wam_joint_state_lock  = threading.RLock()
-        self._wam_joint_state       = None
+        self._wam_joint_position    = None
         
         # non-thread cache placeholder
         self._target_wam_request                = None
@@ -295,6 +296,8 @@ class ArUcoDemo():
         self._stage_timeout_tick_100ms          = 0
         self._prev_transition_success           = True
         self._flag_fail_to_perform_the_request  = False
+        
+        self._target_wam_joints                 = None
 
     #==================================#
     #  P U B L I C    F U N C T I O N  #
@@ -306,7 +309,6 @@ class ArUcoDemo():
         @return success: False if there is any failure in the stage, else True
         """
         success = True
-        self._pub_tf() # TODO: should be in the stage_action(), and use tf locally
         new_stage = self._stage_check()
 
         if self._curr_stage is not new_stage:
@@ -352,7 +354,8 @@ class ArUcoDemo():
         wam_request = None
         position = None
         orientation = None
-        state_data = None
+        wam_joint_position = None
+        position_reached = False
 
         ### Fetch ###
         with self._wam_lock:
@@ -362,10 +365,10 @@ class ArUcoDemo():
             position    = self._zed_position
             orientation = self._zed_orientation
         with self._wam_joint_state_lock:
-            state_data  = self._wam_joint_state
+            wam_joint_position  = self._wam_joint_position
         
         self._print(info="r:{} p:{} o:{}".format(wam_request, position, orientation))
-        self._print(info="joint_state:{}".format(state_data))
+        self._print(info="joint position:{}".format(wam_joint_position))
 
         ### Log ###
         # - Log AruCo Marker Zed Pose, when reaching towards ArUco Marker
@@ -406,6 +409,17 @@ class ArUcoDemo():
                 self._target_zed_orientation = orientation
                 new_stage = DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION
     
+        ### Position Reached Overrides ###
+        if self._target_wam_joints:
+            delta = np.linalg.norm(np.array(wam_joint_position) - np.array(self._target_wam_joints))
+            if delta <= self._JOINT_POSITION_TOL:
+                position_reached = True
+                rospy.logwarn(self._format(info="Position Reached, Skip !!!!"))
+            else:
+                rospy.logwarn(self._format(info="Position NOT Reached, NOT Skip !!!! {}".format(delta)))
+
+
+
         ### Timeout Overrides ###
         # Task specific tuned timeout:
         time_out_100ms = self._STAGE_TIME_OUT_100MS[self._curr_stage]
@@ -422,7 +436,7 @@ class ArUcoDemo():
                     time_out_100ms = LUT["time_out_post_improvisation"]
         
         # timeout action:
-        if self._stage_timeout_tick_100ms > time_out_100ms:
+        if self._stage_timeout_tick_100ms > time_out_100ms or position_reached:
 
             if  self._prev_transition_success is not True:
                 new_stage = DEMO_STAGE_CHOREOGRAPHY.WINDING # Abort, and go homing, if run failed, and timed-out
@@ -499,7 +513,7 @@ class ArUcoDemo():
         if          new_stage is DEMO_STAGE_CHOREOGRAPHY.WINDING:
             ####################### BEGIN #######################
             # - Homing (only in this stage):
-            self._send_barrett_to_joint_positions_non_block(self._LUT_CAPTURED_JOINT_POSITIONS[WAM_REQUEST.HOMING])
+            self._target_wam_joints = (self._LUT_CAPTURED_JOINT_POSITIONS[WAM_REQUEST.HOMING])
             #######################  END  #######################
         
         ###################################
@@ -543,7 +557,7 @@ class ArUcoDemo():
             # -> Invoke Capturing Position Once:
             if      new_stage is DEMO_STAGE_CHOREOGRAPHY.ON_STAGE:
                 ####################### BEGIN #######################
-                self._send_barrett_to_joint_positions_non_block(self._LUT_CAPTURED_JOINT_POSITIONS[self._target_wam_request])
+                self._target_wam_joints = (self._LUT_CAPTURED_JOINT_POSITIONS[self._target_wam_request])
                 #######################  END  #######################
             else:
                 success = False
@@ -558,6 +572,9 @@ class ArUcoDemo():
                 position = self._target_zed_position
                 orientation = self._target_zed_orientation
                 target = self._target_wam_request
+        
+                self._pub_tf() # TODO: should be in the stage_action(), and use tf locally
+                time.sleep(1)
 
                 ### pub tf ###
                 # orientation = np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)])
@@ -576,7 +593,7 @@ class ArUcoDemo():
                 self._transform_broadcaster.sendTransform(aruco_frame_wrt_camera_frame)
 
                 ### Transforms from zed cam feed ###
-                time.sleep(3)
+                time.sleep(1)
                 try:
 
                     # pose
@@ -726,7 +743,7 @@ class ArUcoDemo():
                         rospy.logwarn(self._format(info="(Moving to ArUco Marker) IK solver failed !!"))
                         success = False
                     else:
-                        self._send_barrett_to_joint_positions_non_block(wam_joint_states)
+                        self._target_wam_joints = (wam_joint_states)
 
                     ### Record ###
                     # - cached towards the next stage
@@ -771,7 +788,7 @@ class ArUcoDemo():
                     rospy.logwarn(self._format(info="(Pressing ArUco Marker) IK solver failed !!"))
                     success = False
                 else:
-                    self._send_barrett_to_joint_positions_non_block(wam_joint_states)
+                    self._target_wam_joints = (wam_joint_states)
                 #######################  END  #######################            
             else:
                 success = False
@@ -786,7 +803,7 @@ class ArUcoDemo():
                     rospy.logwarn(self._format(info="(Releasing ArUco Marker) IK solver failed !!"))
                     success = False
                 else:
-                    self._send_barrett_to_joint_positions_non_block(self._target_aruco_pose_before)
+                    self._target_wam_joints = (self._target_aruco_pose_before)
                 #######################  END  #######################
             else:
                 success = False
@@ -809,6 +826,8 @@ class ArUcoDemo():
 
         ### Update ###
         if success:
+            # - perform the actual action:
+            self._send_barrett_to_joint_positions_non_block(joint_positions=self._target_wam_joints)
             # - enter the new stage
             self._curr_stage = new_stage
         else:
@@ -908,25 +927,26 @@ class ArUcoDemo():
         # ZED CENTER
         #######################
         self._CONST_POSES_IN_WORLD_COORD["zed_link_frame"].header.stamp = rospy.Time.now()
-        self.transform_broadcaster.sendTransform(self._CONST_POSES_IN_WORLD_COORD["zed_link_frame"])
+        self._transform_broadcaster.sendTransform(self._CONST_POSES_IN_WORLD_COORD["zed_link_frame"])
 
         #######################
         # CAMERA FRAME FOR OBJECT TRANSFORMS
         #######################
         self._CONST_POSES_IN_WORLD_COORD["camera_link_frame"].header.stamp = rospy.Time.now()
-        self.transform_broadcaster.sendTransform(self._CONST_POSES_IN_WORLD_COORD["camera_link_frame"])
-
+        self._transform_broadcaster.sendTransform(self._CONST_POSES_IN_WORLD_COORD["camera_link_frame"])
 
     #######################
     # Callback Functions
     #######################
     def _callback_upon_wam_joint_states(self, wam_joint_states_msg):
-        if wam_joint_states_msg.data:
+        if len(wam_joint_states_msg.name) == 7:
             ### Pre-process ###
-            state_data = wam_joint_states_msg.data
+            pos = wam_joint_states_msg.position
+            vel = wam_joint_states_msg.velocity
+            eff = wam_joint_states_msg.effort
             ### Capture ###
             with self._wam_joint_state_lock:
-                self._wam_joint_state = state_data
+                self._wam_joint_position = pos
 
     def _callback_upon_summit_cmd(self, is_summit_in_position_msg):
         if is_summit_in_position_msg.data:

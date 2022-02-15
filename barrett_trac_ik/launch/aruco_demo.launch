@@ -1,0 +1,13 @@
+<launch>
+    <!-- Load the urdf into the parameter server. -->
+    <param name="robot_description" textfile="$(find barrett_tf_publisher)/urdf/wam.urdf"/>
+    
+    <!-- Robot State Publisher -->
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" >
+            <remap from="joint_states" to="wam/joint_states" />
+    </node>
+
+    <!-- ARUCO DEMO -->
+    <node name="barrett_trac_ik" pkg="barrett_trac_ik" type="aruco_demo.py" respawn="false" output="screen">
+    </node>
+</launch>
