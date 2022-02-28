@@ -129,14 +129,14 @@ class ArUcoDemo():
             -0.1788168083040264,
             -0.028431769350072793
         ],
-        WAM_REQUEST.FAILED : [0, -1.25, 0, 3, 0, 0, 0],
-        WAM_REQUEST.HOMING : [0, -1.25, 0, 3, 0, 0, 0]
+        WAM_REQUEST.FAILED : [0, -1.75, 0, 3, 0, 0, 0],
+        WAM_REQUEST.HOMING : [0, -1.75, 0, 3, 0, 0, 0]
     }
 
     _LUT_REQUEST_CONST_PARAMS = {
-        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"aruco_x_dir_offset": 0.04, "aruco_y_dir_offset": -0.180, "button_press_norm_dist_factor": 0.130, "time_out_improvisation": 70, "time_out_post_improvisation": 50},
-        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"aruco_x_dir_offset": 0, "aruco_y_dir_offset": -0.177, "button_press_norm_dist_factor": 0.120, "time_out_improvisation": 50, "time_out_post_improvisation": 30},
-        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset": 0, "aruco_y_dir_offset":      0, "button_press_norm_dist_factor": 0.100, "time_out_improvisation": 60, "time_out_post_improvisation": 40},
+        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"aruco_x_dir_offset": 0.04, "aruco_y_dir_offset": -0.180, "button_press_norm_dist_factor": -0.010, "time_out_improvisation": 70, "time_out_post_improvisation": 50},
+        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset": -0.160, "button_press_norm_dist_factor": -0.015, "time_out_improvisation": 50, "time_out_post_improvisation": 30},
+        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset":      0, "button_press_norm_dist_factor": -0.030, "time_out_improvisation": 60, "time_out_post_improvisation": 40},
         WAM_REQUEST.FAILED                  : {"button_press_norm_dist_factor": 0.125},
         WAM_REQUEST.HOMING                  : {"button_press_norm_dist_factor": 0.125},
     }
@@ -176,12 +176,12 @@ class ArUcoDemo():
 
     _STAGE_TIME_OUT_100MS = {
         DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE           : 10,
-        DEMO_STAGE_CHOREOGRAPHY.WINDING             : 100,#35,
-        DEMO_STAGE_CHOREOGRAPHY.WINGS               : 100,#10,
-        DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 100,#25,
+        DEMO_STAGE_CHOREOGRAPHY.WINDING             : 35,
+        DEMO_STAGE_CHOREOGRAPHY.WINGS               : 10,
+        DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 100,#40,
         DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION       : 100,#70, # default
         DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION  : 100,#50, # default
-        DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION    : 100,#20,
+        DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION    : 20,
     }
     
     # Measurements of ZED to forearm link in world coords. TODO: make it some sort of const. 
@@ -237,7 +237,7 @@ class ArUcoDemo():
         #######################
         # Debugger:
         #######################
-        self._verbose = False   # disable extra text prints
+        self._verbose = True   # disable extra text prints
         self._logging_stage = "Init"    # stage tracking
 
         #######################
@@ -623,9 +623,11 @@ class ArUcoDemo():
                                             object_to_world.pose.orientation.z,
                                             object_to_world.pose.orientation.w])
 
-                except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-                    rospy.logwarn(self._format(
-                        info="Can't find transform from {} to {}".format(self._WAM_JOINT_IDs["base_link_frame"], self._WAM_JOINT_IDs["camera_link_frame"])))
+                except Exception as e: 
+                    # (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+                    rospy.logerr(self._format(
+                        info="[{}] Can't find transform from {} to {}".format(e, \
+                            self._WAM_JOINT_IDs["base_link_frame"], self._WAM_JOINT_IDs["camera_link_frame"])))
                     success = False
 
                 ### Tranform to joint positions ###
@@ -649,7 +651,7 @@ class ArUcoDemo():
                     # before_position = position.copy()
                     # position[2] += 0.025
                     factor_post_norm = self._LUT_REQUEST_CONST_PARAMS[target]["button_press_norm_dist_factor"]
-                    before_position = position + 0.25 * normal_dir
+                    before_position = position + (factor_post_norm + 0.15) * normal_dir
                     after_position = position + factor_post_norm * normal_dir
                     self._print(info="[Offsetted] Before position: {}, After position: {}".format(before_position, position))
 
@@ -740,7 +742,7 @@ class ArUcoDemo():
 
                     wam_joint_states = np.array(wam_joint_states, dtype=float).reshape(-1).tolist()
                     if len(wam_joint_states) == 1:
-                        rospy.logwarn(self._format(info="(Moving to ArUco Marker) IK solver failed !!"))
+                        rospy.logerr(self._format(info="(Moving to ArUco Marker) IK solver failed !!"))
                         success = False
                     else:
                         self._target_wam_joints = (wam_joint_states)
@@ -832,7 +834,7 @@ class ArUcoDemo():
             self._curr_stage = new_stage
         else:
             # - stuck in stage transition
-            rospy.logerr(self._format(info="Invalid Stage Transition From [{}] -x-> [{}]".format(self._curr_stage, new_stage)))
+            rospy.logerr(self._format(info="Unsucessful Stage Transition From [{}] -x-> [{}]!".format(self._curr_stage, new_stage)))
         
         # - end:
         rospy.logwarn(self._format(info="===== ===== ===== ===== ===== ===== ===== END. [return: {}]".format(success)))    
@@ -956,7 +958,7 @@ class ArUcoDemo():
                 wam_request = WAM_REQUEST(is_summit_in_position_msg.data)
             except ValueError: # treat out-of-scope as failure
                 wam_request = WAM_REQUEST.FAILED
-                rospy.logwarn("Invalid Request [SUMMIT:{}]!".format(is_summit_in_position_msg.data))
+                rospy.logerr("Invalid Request [SUMMIT:{}]!".format(is_summit_in_position_msg.data))
             
             ### Capture ###
             with self._wam_lock:
