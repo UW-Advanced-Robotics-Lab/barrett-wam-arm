@@ -279,7 +279,7 @@ class ArUcoDemo():
         self._wam_lock          = threading.RLock()
         self._wam_request       = None
         self._zed_lock          = threading.RLock()
-        self._zed_lock          = threading.RLock()
+        self._zed_framestamp     = None
         self._zed_position      = None
         self._zed_orientation   = None
         self._wam_joint_state_lock  = threading.RLock()
@@ -298,6 +298,9 @@ class ArUcoDemo():
         self._flag_fail_to_perform_the_request  = False
         
         self._target_wam_joints                 = None
+        self._wam_joint_position_previous       = None
+
+        self._demo_stage_begin_time             = rospy.Time.now()
 
     #==================================#
     #  P U B L I C    F U N C T I O N  #
@@ -314,7 +317,12 @@ class ArUcoDemo():
         if self._curr_stage is not new_stage:
             success &= self._stage_transition(new_stage = new_stage)
             if success:
+                # log time:
+                delta_time = rospy.Time.now() - self._demo_stage_begin_time
+                self._print(info=" > Stage Ellapsed {} s ".format(delta_time.to_sec()))
+                # reset:
                 self._stage_timeout_tick_100ms = 0 # reset timeout ticks
+                self._demo_stage_begin_time = rospy.Time.now() # capture time
             else:
                 pass # re-attempt, till time-out
         
@@ -356,12 +364,14 @@ class ArUcoDemo():
         orientation = None
         wam_joint_position = None
         position_reached = False
+        zed_aruco_framestamp = None
 
         ### Fetch ###
         with self._wam_lock:
             wam_request = self._wam_request
             self._wam_request = None # clear the cache
         with self._zed_lock:
+            zed_aruco_framestamp = self._zed_framestamp
             position    = self._zed_position
             orientation = self._zed_orientation
         with self._wam_joint_state_lock:
@@ -404,21 +414,24 @@ class ArUcoDemo():
         # re-try with new up-dated aruco position if the previously captured was not valid
         elif self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.ON_STAGE \
             and not self._prev_transition_success: 
-            if position is not None and orientation is not None:
-                self._target_zed_position    = position
-                self._target_zed_orientation = orientation
-                new_stage = DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION
+            if zed_aruco_framestamp is not None and \
+                zed_aruco_framestamp > self.self._demo_stage_begin_time: # make sure only the aruco after staged is trusted
+                    self._target_zed_position    = position
+                    self._target_zed_orientation = orientation
+                    new_stage = DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION
     
         ### Position Reached Overrides ###
-        if self._target_wam_joints:
+        if self._target_wam_joints and self._wam_joint_position_previous is not None:
+            delta_change = np.linalg.norm(np.array(wam_joint_position) - np.array(self._wam_joint_position_previous))
             delta = np.linalg.norm(np.array(wam_joint_position) - np.array(self._target_wam_joints))
-            if delta <= self._JOINT_POSITION_TOL:
+            # - Skip the position, iff delta change and delta is smaller than a specified TOL (can be different threshold)
+            if delta <= self._JOINT_POSITION_TOL and delta_change <= self._JOINT_POSITION_TOL:
                 position_reached = True
                 rospy.logwarn(self._format(info="Position Reached, Skip !!!!"))
             else:
                 rospy.logwarn(self._format(info="Position NOT Reached, NOT Skip !!!! {}".format(delta)))
-
-
+        ## log joint position: 
+        self._wam_joint_position_previous = wam_joint_position
 
         ### Timeout Overrides ###
         # Task specific tuned timeout:
@@ -987,6 +1000,7 @@ class ArUcoDemo():
 
         ### Capture ###
         with self._zed_lock:
+            self._zed_framestamp   = object_in_camera_frame_msg.header.stamp
             self._zed_position    = position
             self._zed_orientation = orientation
 
