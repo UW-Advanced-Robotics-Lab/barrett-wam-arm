@@ -8,6 +8,7 @@
 
 # python libraries:
 from __future__ import division
+from fnmatch import translate
 from ntpath import join
 
 import os
@@ -32,7 +33,7 @@ import tf2_geometry_msgs
 import geometry_msgs.msg
 
 from sensor_msgs.msg import JointState
-from geometry_msgs.msg import PoseStamped, TransformStamped, Vector3, Quaternion, Transform
+from geometry_msgs.msg import PoseStamped, TransformStamped, Vector3, Quaternion, Transform, Pose
 from std_msgs.msg import Bool, Float64MultiArray, Int8, Header
 
 ROOT_DIR = '/home/akeaveny/catkin_ws/src/barrett_trac_ik/'
@@ -134,9 +135,10 @@ class ArUcoDemo():
     }
 
     _LUT_REQUEST_CONST_PARAMS = {
-        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"aruco_x_dir_offset": 0.04, "aruco_y_dir_offset": -0.180, "button_press_norm_dist_factor": -0.010, "time_out_improvisation": 70, "time_out_post_improvisation": 50},
-        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset": -0.160, "button_press_norm_dist_factor": -0.015, "time_out_improvisation": 50, "time_out_post_improvisation": 30},
-        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset":      0, "button_press_norm_dist_factor": -0.030, "time_out_improvisation": 60, "time_out_post_improvisation": 40},
+        # TODO: tuning needed
+        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset":      0, "button_press_norm_dist_factor": 0.01, "time_out_improvisation": 120, "time_out_post_improvisation": 120},
+        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset":      0, "button_press_norm_dist_factor": 0.01, "time_out_improvisation": 120, "time_out_post_improvisation": 120},
+        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset":      0, "button_press_norm_dist_factor": 0.01, "time_out_improvisation": 120, "time_out_post_improvisation": 120},
         WAM_REQUEST.FAILED                  : {"button_press_norm_dist_factor": 0.125},
         WAM_REQUEST.HOMING                  : {"button_press_norm_dist_factor": 0.125},
     }
@@ -151,7 +153,10 @@ class ArUcoDemo():
             "forearm_link_frame"  : 'wam/forearm_link',
             "zed_link_frame"      : 'zed_camera_center',          # 'zed_link_frame' or 'camera_frame'
             # "object_frame"        : 'object_frame', 
+            #-- add-ons:
             "aruco_frame"         : 'aruco_frame',
+            # "aruco_frame_offset_before": 'aruco_frame_offset_before',
+            # "aruco_frame_offset_after": 'aruco_frame_offset_after',
     }
 
     # _ROS_TOPICAL = {
@@ -284,6 +289,7 @@ class ArUcoDemo():
         self._zed_orientation   = None
         self._wam_joint_state_lock  = threading.RLock()
         self._wam_joint_position    = None
+        self._wam_time_stamp        = None
         
         # non-thread cache placeholder
         self._target_wam_request                = None
@@ -292,6 +298,7 @@ class ArUcoDemo():
         self._target_zed_orientation            = None
         self._target_aruco_orientation_after    = None
         self._target_aruco_pose_before          = None
+        self._target_aruco_pose_after           = None
         
         self._stage_timeout_tick_100ms          = 0
         self._prev_transition_success           = True
@@ -415,7 +422,7 @@ class ArUcoDemo():
         elif self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.ON_STAGE \
             and not self._prev_transition_success: 
             if zed_aruco_framestamp is not None and \
-                zed_aruco_framestamp > self.self._demo_stage_begin_time: # make sure only the aruco after staged is trusted
+                zed_aruco_framestamp > self._demo_stage_begin_time: # make sure only the aruco after staged is trusted
                     self._target_zed_position    = position
                     self._target_zed_orientation = orientation
                     new_stage = DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION
@@ -547,10 +554,9 @@ class ArUcoDemo():
             self._flag_fail_to_perform_the_request  = False
             self._target_wam_request                = None
             self._target_zed_position               = None
-            self._target_aruco_position_after       = None
             self._target_zed_orientation            = None
-            self._target_aruco_orientation_after    = None
             self._target_aruco_pose_before          = None
+            self._target_aruco_pose_after           = None
             #######################  END  #######################
 
         ###################################
@@ -581,190 +587,163 @@ class ArUcoDemo():
             # -> Invoke to AruCo Marker
             if      new_stage is DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION:
                 ####################### BEGIN #######################
+                ### INIT: ###
                 # - cache pose locally:
                 position = self._target_zed_position
                 orientation = self._target_zed_orientation
                 target = self._target_wam_request
-        
-                self._pub_tf() # TODO: should be in the stage_action(), and use tf locally
-                time.sleep(1)
+                # - reset placeholders:
+                self._target_aruco_pose_before          = None
+                self._target_aruco_pose_after           = None
 
-                ### pub tf ###
-                # orientation = np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)])
-                # - TF:
-                aruco_frame_wrt_camera_frame = geometry_msgs.msg.TransformStamped()
-                aruco_frame_wrt_camera_frame.header.frame_id = self._WAM_JOINT_IDs["camera_link_frame"]
-                aruco_frame_wrt_camera_frame.child_frame_id = self._WAM_JOINT_IDs["aruco_frame"]
-                aruco_frame_wrt_camera_frame.header.stamp = rospy.Time.now()
-                aruco_frame_wrt_camera_frame.transform.translation.x = position[0]
-                aruco_frame_wrt_camera_frame.transform.translation.y = position[1]
-                aruco_frame_wrt_camera_frame.transform.translation.z = position[2]
-                aruco_frame_wrt_camera_frame.transform.rotation.x = orientation[0]
-                aruco_frame_wrt_camera_frame.transform.rotation.y = orientation[1]
-                aruco_frame_wrt_camera_frame.transform.rotation.z = orientation[2]
-                aruco_frame_wrt_camera_frame.transform.rotation.w = orientation[3]
+                with self._wam_joint_state_lock:
+                    time_now = self._wam_time_stamp  # feed wam time stamp, for tf time matching
+                
+                ### COMPUTE ###
+                # - init:
+                X_AXIS = np.array([1,0,0])
+                Y_AXIS = np.array([0,1,0])
+                Z_AXIS = np.array([0,0,1])
+                # - compute axis:
+                normal_dir = R.from_quat(orientation).apply(Z_AXIS)
+                tag_x_axis_dir = R.from_quat(orientation).apply(X_AXIS)
+                tag_y_axis_dir = R.from_quat(orientation).apply(Y_AXIS)
+                # - apply offset:
+                position_offsetted = position \
+                    + self._LUT_REQUEST_CONST_PARAMS[target]["aruco_x_dir_offset"] * tag_x_axis_dir \
+                    + self._LUT_REQUEST_CONST_PARAMS[target]["aruco_y_dir_offset"] * tag_y_axis_dir
+
+                factor_post_norm = self._LUT_REQUEST_CONST_PARAMS[target]["button_press_norm_dist_factor"]
+                before_position     = position_offsetted + (factor_post_norm + 0.15) * normal_dir   # - aiming
+                after_position      = position_offsetted + factor_post_norm * normal_dir            # - pressing the button
+
+                # - print:
+                self._print(info="[Aruco Mark ] Original Position: {}, XY-Offsetted Position: {}".format(position, position_offsetted))
+                self._print(info="[Offsetted-Z]   Before position: {},        After position: {}".format(before_position, after_position))
+
+
+                ### TF PUB ###
+                # aruco_frame_wrt_camera_frame_before = TransformStamped(
+                #     header=Header(
+                #         frame_id=self._WAM_JOINT_IDs["camera_link_frame"],
+                #         stamp = time_now
+                #     ), 
+                #     child_frame_id=self._WAM_JOINT_IDs["aruco_frame_offset_before"],
+                #     transform = Transform(
+                #         translation = self._array_to_vector3(before_position),
+                #         rotation = self._array_to_quaternion(orientation)
+                #     )
+                # )
+                # aruco_frame_wrt_camera_frame_after = TransformStamped(
+                #     header=Header(
+                #         frame_id=self._WAM_JOINT_IDs["camera_link_frame"],
+                #         stamp = time_now
+                #     ), 
+                #     child_frame_id=self._WAM_JOINT_IDs["aruco_frame_offset_after"],
+                #     transform = Transform(
+                #         translation = self._array_to_vector3(after_position),
+                #         rotation = self._array_to_quaternion(orientation)
+                #     )
+                # )
+
+                # - init local Poses:
+                aruco_frame_wrt_camera_frame = TransformStamped(
+                    header=Header(
+                        frame_id=self._WAM_JOINT_IDs["camera_link_frame"],
+                        stamp = time_now
+                    ), 
+                    child_frame_id=self._WAM_JOINT_IDs["aruco_frame"],
+                    transform = Transform(
+                        translation = self._array_to_vector3(position),
+                        rotation = self._array_to_quaternion(orientation)
+                    )
+                )
+                aruco_frame_wrt_camera_frame_before_pose = PoseStamped(
+                    pose = Pose(
+                        position = self._array_to_vector3(before_position),
+                        orientation = self._array_to_quaternion(orientation)
+                    )
+                )
+                aruco_frame_wrt_camera_frame_after_pose = PoseStamped(
+                    pose = Pose(
+                        position = self._array_to_vector3(after_position),
+                        orientation = self._array_to_quaternion(orientation)
+                    )
+                )
+
+                # - pub current transformation frame
                 self._transform_broadcaster.sendTransform(aruco_frame_wrt_camera_frame)
+                # - pub constant transformation frame
+                self._pub_tf(time_now=time_now) # TODO: should be in the stage_action(), and use tf locally
+                time.sleep(0.5)
+                # self._transform_broadcaster.sendTransform(aruco_frame_wrt_camera_frame_before)
+                # self._transform_broadcaster.sendTransform(aruco_frame_wrt_camera_frame_after)
 
-                ### Transforms from zed cam feed ###
-                time.sleep(1)
+                ### TF SOLVER ###
+                # - transform:
                 try:
-
-                    # pose
-                    object_in_camera_frame_msg = PoseStamped()
-                    # object_in_camera_frame_msg.header.frame_id = self._WAM_JOINT_IDs["camera_link_frame"]
-                    object_in_camera_frame_msg.pose.position.x = position[0]
-                    object_in_camera_frame_msg.pose.position.y = position[1]
-                    object_in_camera_frame_msg.pose.position.z = position[2]
-                    object_in_camera_frame_msg.pose.orientation.x = orientation[0]
-                    object_in_camera_frame_msg.pose.orientation.y = orientation[1]
-                    object_in_camera_frame_msg.pose.orientation.z = orientation[2]
-                    object_in_camera_frame_msg.pose.orientation.w = orientation[3]
-
-                    ''' object_T_world = object_T_zed * zed_T_world '''
-                    # grabbing transformation from camera to the base from the TF node
                     # zed_T_world
                     camera_to_world = self._tf_buffer.lookup_transform(self._WAM_JOINT_IDs["base_link_frame"], self._WAM_JOINT_IDs["camera_link_frame"], rospy.Time(0))
                     # object_T_world
-                    object_to_world = tf2_geometry_msgs.do_transform_pose(object_in_camera_frame_msg, camera_to_world)
+                    object_to_world_before = tf2_geometry_msgs.do_transform_pose(aruco_frame_wrt_camera_frame_before_pose, camera_to_world)
+                    object_to_world_after = tf2_geometry_msgs.do_transform_pose(aruco_frame_wrt_camera_frame_after_pose, camera_to_world)
+                    self._print(object_to_world_before)
 
-                    position = np.array([   object_to_world.pose.position.x,
-                                            object_to_world.pose.position.y,
-                                            object_to_world.pose.position.z])
-
-                    orientation = np.array([object_to_world.pose.orientation.x,
-                                            object_to_world.pose.orientation.y,
-                                            object_to_world.pose.orientation.z,
-                                            object_to_world.pose.orientation.w])
-
-                except Exception as e: 
-                    # (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+                except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e: 
                     rospy.logerr(self._format(
-                        info="[{}] Can't find transform from {} to {}".format(e, \
-                            self._WAM_JOINT_IDs["base_link_frame"], self._WAM_JOINT_IDs["camera_link_frame"])))
+                        info="\n\t[{}] \n\t\tCan't find BEFORE/AFTER transform from aruco to world coord.".format(e)))
                     success = False
-
-                ### Tranform to joint positions ###
+                
+                ### IK SOLVER ###
+                # - solve before:
                 if success:
-                    # position[0] += 0.07
-                    # position[1] -= 0.16
-                    x_axis = np.array([1,0,0])
-                    y_axis = np.array([0,1,0])
-                    z_axis = np.array([0,0,1])
-                    # orientation = np.array([1/np.sqrt(2), 0, 1/np.sqrt(2), 0])
-                    # orientation = np.array([0,0,0,1])
-
-                    normal_dir = R.from_quat(orientation).apply(z_axis)
-                    tag_x_axis_dir = R.from_quat(orientation).apply(x_axis)
-                    tag_y_axis_dir = R.from_quat(orientation).apply(y_axis)
-
-                    position += self._LUT_REQUEST_CONST_PARAMS[target]["aruco_x_dir_offset"] * tag_x_axis_dir
-                    position += self._LUT_REQUEST_CONST_PARAMS[target]["aruco_y_dir_offset"] * tag_y_axis_dir
-
-                    self._print(info="[Original] Normal Dir: {}".format(normal_dir))
-                    # before_position = position.copy()
-                    # position[2] += 0.025
-                    factor_post_norm = self._LUT_REQUEST_CONST_PARAMS[target]["button_press_norm_dist_factor"]
-                    before_position = position + (factor_post_norm + 0.15) * normal_dir
-                    after_position = position + factor_post_norm * normal_dir
-                    self._print(info="[Offsetted] Before position: {}, After position: {}".format(before_position, position))
-
-
-                    ### modify marker value in sim ###
-                    # position = np.array([0.5, 0, 0.85])
-                    # orientation = np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)]) # perpendicular to the floor
-                    # self._ros_log_object_pose(t=position, q=orientation)
-
-                    ### pub tf ###
-                    # - tf
-                    aruco_frame_wrt_camera_frame = geometry_msgs.msg.TransformStamped()
-                    aruco_frame_wrt_camera_frame.header.frame_id = self._WAM_JOINT_IDs["base_link_frame"]
-                    aruco_frame_wrt_camera_frame.child_frame_id = self._WAM_JOINT_IDs["aruco_frame_offset"] # self._WAM_JOINT_IDs["aruco_frame"]
-                    aruco_frame_wrt_camera_frame.header.stamp = rospy.Time.now()
-                    aruco_frame_wrt_camera_frame.transform.translation.x = before_position[0]
-                    aruco_frame_wrt_camera_frame.transform.translation.y = before_position[1]
-                    aruco_frame_wrt_camera_frame.transform.translation.z = before_position[2]
-                    aruco_frame_wrt_camera_frame.transform.rotation.x = orientation[0]
-                    aruco_frame_wrt_camera_frame.transform.rotation.y = orientation[1]
-                    aruco_frame_wrt_camera_frame.transform.rotation.z = orientation[2]
-                    aruco_frame_wrt_camera_frame.transform.rotation.w = orientation[3]
-                    self._transform_broadcaster.sendTransform(aruco_frame_wrt_camera_frame)
-
-                    ###############################
-                    # 1. capture --> before aruco #
-                    ###############################
-                    ### DEBUGGING CODE ###
-                    # TODO: note: position of the arm before pressing aruco marker, for DEBUGGING
-                    # rotation = R.from_euler('y', 90, degrees=True)
-                    # rotation2 = R.from_euler('z', 90, degrees=True)
-                    # orientation = rotation2 * rotation * R.from_quat(orientation)
-                    # orientation = orientation.as_quat()
-                    # # orientation = np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)])
-                    #
-                    # aruco_frame_wrt_camera_frame = geometry_msgs.msg.TransformStamped()
-                    # aruco_frame_wrt_camera_frame.header.frame_id = self._WAM_JOINT_IDs["base_link_frame"]
-                    # aruco_frame_wrt_camera_frame.child_frame_id = 'ee_target' # self._WAM_JOINT_IDs["aruco_frame"]
-                    # aruco_frame_wrt_camera_frame.header.stamp = rospy.Time.now()
-                    # aruco_frame_wrt_camera_frame.transform.translation.x = position[0]
-                    # aruco_frame_wrt_camera_frame.transform.translation.y = position[1]
-                    # aruco_frame_wrt_camera_frame.transform.translation.z = position[2]
-                    # aruco_frame_wrt_camera_frame.transform.rotation.x = orientation[0]
-                    # aruco_frame_wrt_camera_frame.transform.rotation.y = orientation[1]
-                    # aruco_frame_wrt_camera_frame.transform.rotation.z = orientation[2]
-                    # aruco_frame_wrt_camera_frame.transform.rotation.w = orientation[3]
-                    # self._transform_broadcaster.sendTransform(aruco_frame_wrt_camera_frame)
-
-                    ### Orientation ### TODO: implement based on the normal of the aruco marker instead of hard code
-                    # - Calculate required orientation for end effector:
-                    # - (For elevator button)
-                    if target in [WAM_REQUEST.ELEV_DOOR_BUTTON_CALL, WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE]:
-                        rotate_y_90 = R.from_quat(np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)]))
-                        x_axis = np.array([1,0,0])
-                        rotate_angle = -np.arccos(np.dot(x_axis, -normal_dir))
-                        second_rotation = R.from_rotvec(rotate_angle * np.array([0, 0, 1]))
-                        orientation = second_rotation * rotate_y_90
-                        orientation = orientation.as_quat()
-                    # - (For door)
-                    elif target is WAM_REQUEST.CORRIDOR_DOOR_BUTTON:
-                        rotate_x_90 = R.from_quat(np.array([-1/np.sqrt(2), 0, 0, 1/np.sqrt(2)]))
-                        orientation = rotate_x_90
-                        orientation = orientation.as_quat()
-                    
-                    self._print(info="[Result] Transformed Orientation: {}".format(orientation))
-
-
-                    # orientation = R.from_euler(np.array([3.142, 0, 0])).apply(orientation).to_quat()
-                    # orientation = np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)])
-                    before_aruco_position = before_position.copy()
-                    # before_aruco_position[0] -= 15 / 100                                    # offset for: 'wam/wrist_palm_link'
-                    # before_aruco_position[0] = before_aruco_position[0] - 10/100            # before aruco
-                    before_aruco_orientation = orientation
-                    # before_aruco_orientation = np.array([0, 1/np.sqrt(2), 0, 1/np.sqrt(2)]) # perpendicular to the floor
                     wam_joint_states = self._ik_solver.get_ik(
                         self._IK_SEED_STATE_IC,
                         #########################
-                        before_aruco_position[0],
-                        before_aruco_position[1],
-                        before_aruco_position[2],
-                        before_aruco_orientation[0],
-                        before_aruco_orientation[1],
-                        before_aruco_orientation[2],
-                        before_aruco_orientation[3],
+                        object_to_world_before.pose.position.x,
+                        object_to_world_before.pose.position.y,
+                        object_to_world_before.pose.position.z,
+                        -object_to_world_before.pose.orientation.x, # mirror z 
+                        -object_to_world_before.pose.orientation.y, # mirror z 
+                        object_to_world_before.pose.orientation.z,
+                        object_to_world_before.pose.orientation.w,
+                        # -1/np.sqrt(2), 0, 0, 1/np.sqrt(2)
                         #########################
-                        # brx=0.5, bry=0.5, brz=0.5
                     )
-
                     wam_joint_states = np.array(wam_joint_states, dtype=float).reshape(-1).tolist()
                     if len(wam_joint_states) == 1:
-                        rospy.logerr(self._format(info="(Moving to ArUco Marker) IK solver failed !!"))
+                        rospy.logerr(self._format(info="IK solver failed for (BEFORE) ArUco Marker !!"))
                         success = False
                     else:
-                        self._target_wam_joints = (wam_joint_states)
-
-                    ### Record ###
-                    # - cached towards the next stage
-                    self._target_aruco_position_after = after_position 
-                    self._target_aruco_orientation_after = orientation
-                    self._target_aruco_pose_before = wam_joint_states
+                        # - cached towards the next stage
+                        self._target_aruco_pose_before = wam_joint_states
+                # - solve after:
+                if success:
+                    wam_joint_states = self._ik_solver.get_ik(
+                        self._IK_SEED_STATE_IC,
+                        #########################
+                        object_to_world_after.pose.position.x,
+                        object_to_world_after.pose.position.y,
+                        object_to_world_after.pose.position.z,
+                        -object_to_world_after.pose.orientation.x,
+                        -object_to_world_after.pose.orientation.y,
+                        object_to_world_after.pose.orientation.z,
+                        object_to_world_after.pose.orientation.w,
+                        # -1/np.sqrt(2), 0, 0, 1/np.sqrt(2)
+                        #########################
+                    )
+                    wam_joint_states = np.array(wam_joint_states, dtype=float).reshape(-1).tolist()
+                    if len(wam_joint_states) == 1:
+                        rospy.logerr(self._format(info="IK solver failed for (AFTER) ArUco Marker !!"))
+                        success = False
+                    else:
+                        # - cached towards the next stage
+                        self._target_aruco_pose_after = wam_joint_states
+                
+                ### CMD for this session ###
+                if self._target_aruco_pose_before and success:
+                    rospy.logwarn(self._format(info="IK solver COMPLETED !! ARM in MOTION ..."))
+                    self._target_wam_joints = (self._target_aruco_pose_before)
                 #######################  END  #######################
             else:
                 success = False
@@ -775,35 +754,9 @@ class ArUcoDemo():
             # -> Invoke to press AruCo Marker
             if      new_stage is DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION:
                 ####################### BEGIN #######################
-                # - cache pose locally:
-                orientation = self._target_aruco_orientation_after
-                after_position = self._target_aruco_position_after
-
-                ### Compute ArUco Pressing Action:
-                at_aruco_position = after_position.copy()
-                # at_aruco_position[0] -= 15 / 100                                         # offset for: 'wam/wrist_palm_link'
-                at_aruco_orientation = orientation
-                # at_aruco_orientation = np.array([0, 1 / np.sqrt(2), 0, 1 / np.sqrt(2)])  # perpendicular to the floor
-
-                wam_joint_states = self._ik_solver.get_ik(self._IK_SEED_STATE_IC,
-                                                        #########################
-                                                        at_aruco_position[0],
-                                                        at_aruco_position[1],
-                                                        at_aruco_position[2],
-                                                        at_aruco_orientation[0],
-                                                        at_aruco_orientation[1],
-                                                        at_aruco_orientation[2],
-                                                        at_aruco_orientation[3],
-                                                        #########################
-                                                        # brx=0.5, bry=0.5, brz=0.5
-                                                        )
-
-                wam_joint_states = np.array(wam_joint_states, dtype=float).reshape(-1).tolist()
-                if len(wam_joint_states) == 1:
-                    rospy.logwarn(self._format(info="(Pressing ArUco Marker) IK solver failed !!"))
-                    success = False
-                else:
-                    self._target_wam_joints = (wam_joint_states)
+                ### CMD for this session ###
+                if self._target_aruco_pose_after:
+                    self._target_wam_joints = (self._target_aruco_pose_after)
                 #######################  END  #######################            
             else:
                 success = False
@@ -814,10 +767,8 @@ class ArUcoDemo():
             # -> Invoke to release the button
             if      new_stage is DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION:
                 ####################### BEGIN #######################
-                if len(self._target_aruco_pose_before) == 1:
-                    rospy.logwarn(self._format(info="(Releasing ArUco Marker) IK solver failed !!"))
-                    success = False
-                else:
+                ### CMD for this session ###
+                if self._target_aruco_pose_before:
                     self._target_wam_joints = (self._target_aruco_pose_before)
                 #######################  END  #######################
             else:
@@ -829,7 +780,7 @@ class ArUcoDemo():
             # -> Invoke to home, end of the choreography
             if      new_stage is DEMO_STAGE_CHOREOGRAPHY.WINDING:
                 ####################### BEGIN #######################
-                pass # do nothing
+                pass # do nothing, let the winding stage handling the homing
                 #######################  END  #######################
             else:
                 success = False
@@ -904,6 +855,17 @@ class ArUcoDemo():
         return success
 
     #######################
+    # Helper Static Functions
+    #######################
+    @staticmethod
+    def _array_to_vector3(array):
+        return Vector3(array[0], array[1], array[2])
+    
+    @staticmethod
+    def _array_to_quaternion(array):
+        return Quaternion(array[0], array[1], array[2], array[3])
+
+    #######################
     # Helper Functions
     #######################
     def _pub_aruco_demo_wam_status(self, status):
@@ -937,17 +899,23 @@ class ArUcoDemo():
             ".format(t[0], t[1], t[2], r_vec[0], r_vec[1], r_vec[2])
             rospy.loginfo(self._format(LOG_STR))
 
-    def _pub_tf(self):
+    def _pub_tf(self, time_now=None):
         #######################
         # ZED CENTER
         #######################
-        self._CONST_POSES_IN_WORLD_COORD["zed_link_frame"].header.stamp = rospy.Time.now()
+        if time_now is None:
+            self._CONST_POSES_IN_WORLD_COORD["zed_link_frame"].header.stamp = rospy.Time.now()
+        else:
+            self._CONST_POSES_IN_WORLD_COORD["zed_link_frame"].header.stamp = time_now
         self._transform_broadcaster.sendTransform(self._CONST_POSES_IN_WORLD_COORD["zed_link_frame"])
 
         #######################
         # CAMERA FRAME FOR OBJECT TRANSFORMS
         #######################
-        self._CONST_POSES_IN_WORLD_COORD["camera_link_frame"].header.stamp = rospy.Time.now()
+        if time_now is None:
+            self._CONST_POSES_IN_WORLD_COORD["camera_link_frame"].header.stamp = rospy.Time.now()
+        else:
+            self._CONST_POSES_IN_WORLD_COORD["camera_link_frame"].header.stamp = time_now
         self._transform_broadcaster.sendTransform(self._CONST_POSES_IN_WORLD_COORD["camera_link_frame"])
 
     #######################
@@ -956,12 +924,14 @@ class ArUcoDemo():
     def _callback_upon_wam_joint_states(self, wam_joint_states_msg):
         if len(wam_joint_states_msg.name) == 7:
             ### Pre-process ###
+            time_stamp = wam_joint_states_msg.header.stamp
             pos = wam_joint_states_msg.position
             vel = wam_joint_states_msg.velocity
             eff = wam_joint_states_msg.effort
             ### Capture ###
             with self._wam_joint_state_lock:
                 self._wam_joint_position = pos
+                self._wam_time_stamp = time_stamp
 
     def _callback_upon_summit_cmd(self, is_summit_in_position_msg):
         if is_summit_in_position_msg.data:
