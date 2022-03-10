@@ -136,9 +136,9 @@ class ArUcoDemo():
 
     _LUT_REQUEST_CONST_PARAMS = {
         # TODO: tuning needed
-        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"aruco_x_dir_offset":    0.005, "aruco_y_dir_offset":  -0.200, "button_press_norm_dist_factor": 0.002, "time_out_improvisation": 80, "time_out_post_improvisation": 25},
-        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"aruco_x_dir_offset":    -0.007, "aruco_y_dir_offset":   -0.212, "button_press_norm_dist_factor": 0.003, "time_out_improvisation": 80, "time_out_post_improvisation": 20},
-        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset":       0, "button_press_norm_dist_factor": -0.023, "time_out_improvisation": 80, "time_out_post_improvisation": 25}, # calibrate on March 09
+        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"aruco_x_dir_offset":    0.005, "aruco_y_dir_offset":  -0.200, "button_press_norm_dist_factor": 0.002, "button_delta": 0.030,  "time_out_improvisation": 80, "time_out_post_improvisation": 25},
+        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"aruco_x_dir_offset":    -0.007, "aruco_y_dir_offset":   -0.212, "button_press_norm_dist_factor": 0.013, "button_delta": 0.030,  "time_out_improvisation": 80, "time_out_post_improvisation": 20},
+        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset":   -0.200, "button_press_norm_dist_factor": +0.001, "button_delta": 0.100,  "time_out_improvisation": 80, "time_out_post_improvisation": 25}, # calibrate on March 09
         # WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset":      0, "button_press_norm_dist_factor": -0.012, "time_out_improvisation": 120, "time_out_post_improvisation": 40}, # Button press downstair
         WAM_REQUEST.FAILED                  : {"button_press_norm_dist_factor": 0.125},
         WAM_REQUEST.HOMING                  : {"button_press_norm_dist_factor": 0.125},
@@ -615,7 +615,8 @@ class ArUcoDemo():
                     + self._LUT_REQUEST_CONST_PARAMS[target]["aruco_y_dir_offset"] * tag_y_axis_dir
 
                 factor_post_norm = self._LUT_REQUEST_CONST_PARAMS[target]["button_press_norm_dist_factor"]
-                before_position     = position_offsetted + (factor_post_norm + 0.03) * normal_dir   # - aiming
+                delta_button = self._LUT_REQUEST_CONST_PARAMS[target]["button_delta"]
+                before_position     = position_offsetted + (factor_post_norm + delta_button) * normal_dir   # - aiming
                 after_position      = position_offsetted + factor_post_norm * normal_dir            # - pressing the button
 
                 # - print:
