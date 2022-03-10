@@ -136,9 +136,10 @@ class ArUcoDemo():
 
     _LUT_REQUEST_CONST_PARAMS = {
         # TODO: tuning needed
-        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset":      0, "button_press_norm_dist_factor": 0.01, "time_out_improvisation": 120, "time_out_post_improvisation": 120},
-        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset":      0, "button_press_norm_dist_factor": 0.01, "time_out_improvisation": 120, "time_out_post_improvisation": 120},
-        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset":      0, "button_press_norm_dist_factor": 0.01, "time_out_improvisation": 120, "time_out_post_improvisation": 120},
+        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset":  -0.183, "button_press_norm_dist_factor": -0.003, "time_out_improvisation": 80, "time_out_post_improvisation": 25},
+        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset":   -0.17, "button_press_norm_dist_factor":  0.002, "time_out_improvisation": 80, "time_out_post_improvisation": 20},
+        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset":       0, "button_press_norm_dist_factor": -0.016, "time_out_improvisation": 80, "time_out_post_improvisation": 25}, # calibrate on March 09
+        # WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset":      0, "button_press_norm_dist_factor": -0.012, "time_out_improvisation": 120, "time_out_post_improvisation": 40}, # Button press downstair
         WAM_REQUEST.FAILED                  : {"button_press_norm_dist_factor": 0.125},
         WAM_REQUEST.HOMING                  : {"button_press_norm_dist_factor": 0.125},
     }
@@ -181,12 +182,12 @@ class ArUcoDemo():
 
     _STAGE_TIME_OUT_100MS = {
         DEMO_STAGE_CHOREOGRAPHY.OFF_STAGE           : 10,
-        DEMO_STAGE_CHOREOGRAPHY.WINDING             : 35,
+        DEMO_STAGE_CHOREOGRAPHY.WINDING             : 20, # pub completion flag after winding --> wings
         DEMO_STAGE_CHOREOGRAPHY.WINGS               : 10,
-        DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 100,#40,
-        DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION       : 100,#70, # default
-        DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION  : 100,#50, # default
-        DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION    : 20,
+        DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 50,#40,
+        DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION       : 50,#70, # default
+        DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION  : 50,#50, # default
+        DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION    : 15,
     }
     
     # Measurements of ZED to forearm link in world coords. TODO: make it some sort of const. 
@@ -614,7 +615,7 @@ class ArUcoDemo():
                     + self._LUT_REQUEST_CONST_PARAMS[target]["aruco_y_dir_offset"] * tag_y_axis_dir
 
                 factor_post_norm = self._LUT_REQUEST_CONST_PARAMS[target]["button_press_norm_dist_factor"]
-                before_position     = position_offsetted + (factor_post_norm + 0.15) * normal_dir   # - aiming
+                before_position     = position_offsetted + (factor_post_norm + 0.02) * normal_dir   # - aiming
                 after_position      = position_offsetted + factor_post_norm * normal_dir            # - pressing the button
 
                 # - print:
