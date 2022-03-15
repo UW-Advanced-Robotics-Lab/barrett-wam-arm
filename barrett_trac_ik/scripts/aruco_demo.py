@@ -101,6 +101,7 @@ class ArUcoDemo():
     #===================#
     ### Config ###
     _JOINT_POSITION_TOL = 0.020
+    _JOINT_TORQUE_TOL = 1500 # unused yet
     ### Look up table for pre-calibrated joint-positions ###
     _LUT_CAPTURED_JOINT_POSITIONS = {
         WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : [    
@@ -136,10 +137,9 @@ class ArUcoDemo():
 
     _LUT_REQUEST_CONST_PARAMS = {
         # TODO: tuning needed
-        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"aruco_x_dir_offset":    0.005, "aruco_y_dir_offset":  -0.200, "button_press_norm_dist_factor": 0.002, "button_delta": 0.030,  "time_out_improvisation": 80, "time_out_post_improvisation": 25},
-        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"aruco_x_dir_offset":    -0.007, "aruco_y_dir_offset":   -0.212, "button_press_norm_dist_factor": 0.013, "button_delta": 0.030,  "time_out_improvisation": 80, "time_out_post_improvisation": 20},
-        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset":   -0.200, "button_press_norm_dist_factor": +0.001, "button_delta": 0.100,  "time_out_improvisation": 80, "time_out_post_improvisation": 25}, # calibrate on March 09
-        # WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset":    0, "aruco_y_dir_offset":      0, "button_press_norm_dist_factor": -0.012, "time_out_improvisation": 120, "time_out_post_improvisation": 40}, # Button press downstair
+        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"aruco_x_dir_offset":  0.005, "aruco_y_dir_offset": -0.200, "button_press_norm_dist_factor": 0.002, "button_delta": 0.030,  "time_out_improvisation": 80, "time_out_post_improvisation": 25},
+        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"aruco_x_dir_offset": -0.007, "aruco_y_dir_offset": -0.212, "button_press_norm_dist_factor": 0.003, "button_delta": 0.100,  "time_out_improvisation": 80, "time_out_post_improvisation": 30},
+        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset":      0, "aruco_y_dir_offset": -0.200, "button_press_norm_dist_factor": 0.001, "button_delta": 0.100,  "time_out_improvisation": 80, "time_out_post_improvisation": 25}, # calibrate on March 09
         WAM_REQUEST.FAILED                  : {"button_press_norm_dist_factor": 0.125},
         WAM_REQUEST.HOMING                  : {"button_press_norm_dist_factor": 0.125},
     }
@@ -290,6 +290,8 @@ class ArUcoDemo():
         self._zed_orientation   = None
         self._wam_joint_state_lock  = threading.RLock()
         self._wam_joint_position    = None
+        self._wam_joint_velocity    = None
+        self._wam_joint_torque      = None
         self._wam_time_stamp        = None
         
         # non-thread cache placeholder
@@ -307,6 +309,7 @@ class ArUcoDemo():
         
         self._target_wam_joints                 = None
         self._wam_joint_position_previous       = None
+        self._wam_joint_torque_previous         = None
 
         self._demo_stage_begin_time             = rospy.Time.now()
 
@@ -371,7 +374,9 @@ class ArUcoDemo():
         position = None
         orientation = None
         wam_joint_position = None
+        wam_joint_torque = None
         position_reached = False
+        critical_torque_reached = False
         zed_aruco_framestamp = None
 
         ### Fetch ###
@@ -384,9 +389,10 @@ class ArUcoDemo():
             orientation = self._zed_orientation
         with self._wam_joint_state_lock:
             wam_joint_position  = self._wam_joint_position
+            wam_joint_torque    = self._wam_joint_torque
         
         self._print(info="r:{} p:{} o:{}".format(wam_request, position, orientation))
-        self._print(info="joint position:{}".format(wam_joint_position))
+        # self._print(info="joint position:{} | torque:{}".format(wam_joint_position, wam_joint_torque))
 
         ### Log ###
         # - Log AruCo Marker Zed Pose, when reaching towards ArUco Marker
@@ -432,14 +438,25 @@ class ArUcoDemo():
         if self._target_wam_joints and self._wam_joint_position_previous is not None:
             delta_change = np.linalg.norm(np.array(wam_joint_position) - np.array(self._wam_joint_position_previous))
             delta = np.linalg.norm(np.array(wam_joint_position) - np.array(self._target_wam_joints))
+            delta_torque = np.linalg.norm(np.array(wam_joint_torque) - np.array(self._wam_joint_torque_previous))
+            delta_torque_over_delta_change = delta_torque / (0.00001 + delta_change)
             # - Skip the position, iff delta change and delta is smaller than a specified TOL (can be different threshold)
             if delta <= self._JOINT_POSITION_TOL and delta_change <= self._JOINT_POSITION_TOL:
                 position_reached = True
                 rospy.logwarn(self._format(info="Position Reached, Skip !!!!"))
             else:
+                if self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION:
+                    # only check torque critical here
+                    if delta_torque_over_delta_change >= self._JOINT_TORQUE_TOL:
+                        critical_torque_reached = True
+                        rospy.logwarn(self._format(info="Critical Torque Reached, Skip !!!! {}".format(delta)))
+                
                 rospy.logwarn(self._format(info="Position NOT Reached, NOT Skip !!!! {}".format(delta)))
+            # log:
+            self._print(info="[DELTA] joint position:{} | torque:{} | ratio:{}".format(delta_change, delta_torque, delta_torque_over_delta_change))
         ## log joint position: 
         self._wam_joint_position_previous = wam_joint_position
+        self._wam_joint_torque_previous = wam_joint_torque
 
         ### Timeout Overrides ###
         # Task specific tuned timeout:
@@ -455,9 +472,12 @@ class ArUcoDemo():
                     time_out_100ms = LUT["time_out_improvisation"]
                 elif "time_out_post_improvisation" in LUT and self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION:
                     time_out_100ms = LUT["time_out_post_improvisation"]
-        
+
         # timeout action:
-        if self._stage_timeout_tick_100ms > time_out_100ms or position_reached:
+        if self._stage_timeout_tick_100ms > time_out_100ms or position_reached or critical_torque_reached:
+            # - log for time-out:
+            if self._stage_timeout_tick_100ms > time_out_100ms:
+                rospy.logwarn(self._format(info="Timeout !!!! {}".format(time_out_100ms)))
 
             if  self._prev_transition_success is not True:
                 new_stage = DEMO_STAGE_CHOREOGRAPHY.WINDING # Abort, and go homing, if run failed, and timed-out
@@ -933,6 +953,8 @@ class ArUcoDemo():
             ### Capture ###
             with self._wam_joint_state_lock:
                 self._wam_joint_position = pos
+                self._wam_joint_velocity = vel
+                self._wam_joint_torque   = eff
                 self._wam_time_stamp = time_stamp
 
     def _callback_upon_summit_cmd(self, is_summit_in_position_msg):
