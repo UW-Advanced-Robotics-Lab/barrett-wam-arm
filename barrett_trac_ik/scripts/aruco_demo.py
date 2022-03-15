@@ -101,7 +101,6 @@ class ArUcoDemo():
     #===================#
     ### Config ###
     _JOINT_POSITION_TOL = 0.020
-    _JOINT_TORQUE_TOL = 1500 # unused yet
     ### Look up table for pre-calibrated joint-positions ###
     _LUT_CAPTURED_JOINT_POSITIONS = {
         WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : [    
@@ -137,9 +136,9 @@ class ArUcoDemo():
 
     _LUT_REQUEST_CONST_PARAMS = {
         # TODO: tuning needed
-        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"aruco_x_dir_offset":  0.005, "aruco_y_dir_offset": -0.200, "button_press_norm_dist_factor": 0.002, "button_delta": 0.030,  "time_out_improvisation": 80, "time_out_post_improvisation": 25},
-        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"aruco_x_dir_offset": -0.007, "aruco_y_dir_offset": -0.212, "button_press_norm_dist_factor": 0.003, "button_delta": 0.100,  "time_out_improvisation": 80, "time_out_post_improvisation": 30},
-        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset":      0, "aruco_y_dir_offset": -0.200, "button_press_norm_dist_factor": 0.001, "button_delta": 0.100,  "time_out_improvisation": 80, "time_out_post_improvisation": 25}, # calibrate on March 09
+        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"aruco_x_dir_offset":  0.005, "aruco_y_dir_offset": -0.200, "button_press_norm_dist_factor": -0.002, "button_delta": 0.100, "button_impact_threshold": 2000,  "time_out_improvisation":100, "time_out_post_improvisation": 70},
+        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"aruco_x_dir_offset": -0.007, "aruco_y_dir_offset": -0.212, "button_press_norm_dist_factor":  0.003, "button_delta": 0.100, "button_impact_threshold": 1800,  "time_out_improvisation":100, "time_out_post_improvisation": 70},
+        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset":      0, "aruco_y_dir_offset": -0.200, "button_press_norm_dist_factor":  0.001, "button_delta": 0.100, "button_impact_threshold": 6000,  "time_out_improvisation": 80, "time_out_post_improvisation": 25}, # calibrate on March 09
         WAM_REQUEST.FAILED                  : {"button_press_norm_dist_factor": 0.125},
         WAM_REQUEST.HOMING                  : {"button_press_norm_dist_factor": 0.125},
     }
@@ -187,7 +186,7 @@ class ArUcoDemo():
         DEMO_STAGE_CHOREOGRAPHY.ON_STAGE            : 50,#40,
         DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION       : 50,#70, # default
         DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION  : 50,#50, # default
-        DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION    : 15,
+        DEMO_STAGE_CHOREOGRAPHY.RE_IMPROVISATION    : 50,
     }
     
     # Measurements of ZED to forearm link in world coords. TODO: make it some sort of const. 
@@ -445,12 +444,6 @@ class ArUcoDemo():
                 position_reached = True
                 rospy.logwarn(self._format(info="Position Reached, Skip !!!!"))
             else:
-                if self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION:
-                    # only check torque critical here
-                    if delta_torque_over_delta_change >= self._JOINT_TORQUE_TOL:
-                        critical_torque_reached = True
-                        rospy.logwarn(self._format(info="Critical Torque Reached, Skip !!!! {}".format(delta)))
-                
                 rospy.logwarn(self._format(info="Position NOT Reached, NOT Skip !!!! {}".format(delta)))
             # log:
             self._print(info="[DELTA] joint position:{} | torque:{} | ratio:{}".format(delta_change, delta_torque, delta_torque_over_delta_change))
@@ -461,17 +454,23 @@ class ArUcoDemo():
         ### Timeout Overrides ###
         # Task specific tuned timeout:
         time_out_100ms = self._STAGE_TIME_OUT_100MS[self._curr_stage]
-        if self._curr_stage in [
-                # - Task specific time-out
-                DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION,
-                DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION
-            ]:
-            if self._target_wam_request is not None:
-                LUT = self._LUT_REQUEST_CONST_PARAMS[self._target_wam_request]
-                if "time_out_improvisation" in LUT and self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION:
-                    time_out_100ms = LUT["time_out_improvisation"]
-                elif "time_out_post_improvisation" in LUT and self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION:
-                    time_out_100ms = LUT["time_out_post_improvisation"]
+        if self._target_wam_request is not None:
+            LUT = self._LUT_REQUEST_CONST_PARAMS[self._target_wam_request]
+            if self._curr_stage in [
+                    # - Task specific time-out
+                    DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION,
+                    DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION
+                ]:
+                    if "time_out_improvisation" in LUT and self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.IMPROVISATION:
+                        time_out_100ms = LUT["time_out_improvisation"]
+                    elif "time_out_post_improvisation" in LUT and self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION:
+                        time_out_100ms = LUT["time_out_post_improvisation"]
+            if self._curr_stage is DEMO_STAGE_CHOREOGRAPHY.POST_IMPROVISATION:
+                if not position_reached:
+                    # only check torque critical here
+                    if delta_torque_over_delta_change >= LUT["button_impact_threshold"]:
+                        critical_torque_reached = True
+                        rospy.logwarn(self._format(info="Critical Torque Reached, Skip !!!! {}".format(delta)))
 
         # timeout action:
         if self._stage_timeout_tick_100ms > time_out_100ms or position_reached or critical_torque_reached:
