@@ -136,9 +136,9 @@ class ArUcoDemo():
 
     _LUT_REQUEST_CONST_PARAMS = {
         # TODO: tuning needed
-        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"aruco_x_dir_offset":  0.005, "aruco_y_dir_offset": -0.200, "button_press_norm_dist_factor": -0.002, "button_delta": 0.100, "button_impact_threshold": 2000,  "time_out_improvisation":100, "time_out_post_improvisation": 70},
-        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"aruco_x_dir_offset": -0.007, "aruco_y_dir_offset": -0.212, "button_press_norm_dist_factor":  0.003, "button_delta": 0.100, "button_impact_threshold": 1800,  "time_out_improvisation":100, "time_out_post_improvisation": 70},
-        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset":      0, "aruco_y_dir_offset": -0.200, "button_press_norm_dist_factor":  0.001, "button_delta": 0.100, "button_impact_threshold": 6000,  "time_out_improvisation": 80, "time_out_post_improvisation": 25}, # calibrate on March 09
+        WAM_REQUEST.ELEV_DOOR_BUTTON_INSIDE : {"aruco_x_dir_offset":  0.000, "aruco_y_dir_offset": -0.200, "button_press_norm_dist_factor": -0.010, "button_delta": 0.100, "button_impact_threshold": 2000,  "time_out_improvisation":100, "time_out_post_improvisation": 70},
+        WAM_REQUEST.ELEV_DOOR_BUTTON_CALL   : {"aruco_x_dir_offset":  0.000, "aruco_y_dir_offset": -0.210, "button_press_norm_dist_factor": -0.001, "button_delta": 0.100, "button_impact_threshold": 1500,  "time_out_improvisation":100, "time_out_post_improvisation": 70},
+        WAM_REQUEST.CORRIDOR_DOOR_BUTTON    : {"aruco_x_dir_offset":      0, "aruco_y_dir_offset": -0.150, "button_press_norm_dist_factor":  0.005, "button_delta": 0.100, "button_impact_threshold": 6000,  "time_out_improvisation": 80, "time_out_post_improvisation": 25}, # calibrate on March 09
         WAM_REQUEST.FAILED                  : {"button_press_norm_dist_factor": 0.125},
         WAM_REQUEST.HOMING                  : {"button_press_norm_dist_factor": 0.125},
     }
@@ -158,20 +158,6 @@ class ArUcoDemo():
             # "aruco_frame_offset_before": 'aruco_frame_offset_before',
             # "aruco_frame_offset_after": 'aruco_frame_offset_after',
     }
-
-    # _ROS_TOPICAL = {
-    #     "subscriber" : {
-    #         "summit-flag" : "/task_completion_flag_summit",
-    #         "aruco-pose" : "/aruco_single/pose",
-    #         "wam-joint-states" : "/wam/joint_states",
-    #     },
-    #     "publisher" : {
-    #         "wam-flag" : "/task_completion_flag_wam",
-    #     },
-    #     "service" : {
-    #         "wam-move" : "/wam/joint_move"
-    #     }
-    # }
 
     _IK_SEED_STATE_IC = [
         # [0.00] * self._ik_solver.number_of_joints
@@ -242,7 +228,7 @@ class ArUcoDemo():
         #######################
         # Debugger:
         #######################
-        self._verbose = True   # disable extra text prints
+        self._verbose = False   # disable extra text prints
         self._logging_stage = "Init"    # stage tracking
 
         #######################
@@ -272,7 +258,10 @@ class ArUcoDemo():
         #######################
         # Other Modules
         #######################
-        self._ik_solver = IK(self._WAM_JOINT_IDs["base_link_frame"], self._WAM_JOINT_IDs["ee_link_frame"])
+        self._ik_solver = IK(
+            self._WAM_JOINT_IDs["base_link_frame"], self._WAM_JOINT_IDs["ee_link_frame"],
+            timeout=0.100, epsilon=1e-4, solve_type="Distance", # ease out parameters
+        )
         
         #######################
         # Initialization
@@ -718,6 +707,7 @@ class ArUcoDemo():
                 ### IK SOLVER ###
                 # - solve before:
                 if success:
+                    self._IK_SEED_STATE_IC = [0.00] * 7
                     wam_joint_states = self._ik_solver.get_ik(
                         self._IK_SEED_STATE_IC,
                         #########################
@@ -741,7 +731,7 @@ class ArUcoDemo():
                 # - solve after:
                 if success:
                     wam_joint_states = self._ik_solver.get_ik(
-                        self._IK_SEED_STATE_IC,
+                        wam_joint_states,
                         #########################
                         object_to_world_after.pose.position.x,
                         object_to_world_after.pose.position.y,
