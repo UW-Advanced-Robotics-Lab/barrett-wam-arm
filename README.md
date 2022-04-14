@@ -41,3 +41,4 @@ Simulation tools were developed to improve and/or debug software packages used i
 5. Launch Trac IK. 
 
     ```roslaunch trac_ik aruco_demo.launch```
+    - launches: https://github.com/UW-Advanced-Robotics-Lab/barrett-wam-arm/blob/main/barrett_trac_ik/scripts/aruco_demo.py
