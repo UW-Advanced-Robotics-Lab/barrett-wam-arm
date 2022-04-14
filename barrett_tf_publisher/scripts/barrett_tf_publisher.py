@@ -53,10 +53,10 @@ class TFPublisher:
 
         self.zed_mesh_file = rospy.get_param('zed_mesh_file', None)
 
-        # Measurements of ZED to forearm link in world coords.
-        self.offset_to_left_ZED_lens_x_axis = -135 / 1000  # height from zed to forearm link
+        # Measurements of ZED to forearm link in world coords. TODO: make it some sort of const. 
+        self.offset_to_left_ZED_lens_x_axis = -135 / 1000  # [m] height from zed to forearm link
         self.offset_to_left_ZED_lens_y_axis = -171 / 1000  # distance from zed to forearm link. TODO: this is a rough measurement.
-        self.offset_to_left_ZED_lens_z_axis = 65 / 1000  # camera center to left lens.
+        self.offset_to_left_ZED_lens_z_axis = 65 / 1000    # camera center to left lens.
 
         #######################
         # Transforms: ZED tf tree
