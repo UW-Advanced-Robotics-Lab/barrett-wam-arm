@@ -19,7 +19,7 @@ Simulation tools were developed to improve and/or debug software packages used i
 
     ```roslaunch trac_ik barrett_trac_ik_arl_affpose_simple.launch```
 
-# Launch for ArUco Demo
+# Launch for ArUco Demo [Video](https://youtu.be/rkKu2eE83Ss)
 ## WAM PC:
 1. First, ensure that the Barrett WAM arm is calibrated. 
 
@@ -41,4 +41,4 @@ Simulation tools were developed to improve and/or debug software packages used i
 5. Launch Trac IK. 
 
     ```roslaunch trac_ik aruco_demo.launch```
-    - launches: https://github.com/UW-Advanced-Robotics-Lab/barrett-wam-arm/blob/main/barrett_trac_ik/scripts/aruco_demo.py
+
