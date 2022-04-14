@@ -20,6 +20,7 @@ Simulation tools were developed to improve and/or debug software packages used i
     ```roslaunch trac_ik barrett_trac_ik_arl_affpose_simple.launch```
 
 # Launch for ArUco Demo
+## WAM PC:
 1. First, ensure that the Barrett WAM arm is calibrated. 
 
     ```bt-zero-cal```
@@ -28,18 +29,15 @@ Simulation tools were developed to improve and/or debug software packages used i
 
     ```roslaunch wam_node wam_node.launch```
 
+## Jetson TX2 with ZED
 3. Launch ZED camera.
 
     ```roslaunch zed_ros_wrapper zed.launch```
 
-4. Launch TF Publisher.
-
-    ```roslaunch tf_publisher tf_publisher.launch```
-    
-5. Launch ArUco Node. 
+4. Launch ArUco Node. 
 
     ```roslaunch aruco_ros single.launch```
     
-6. Launch Trac IK. 
+5. Launch Trac IK. 
 
-    ```roslaunch trac_ik demo.launch```
+    ```roslaunch trac_ik aruco_demo.launch```
