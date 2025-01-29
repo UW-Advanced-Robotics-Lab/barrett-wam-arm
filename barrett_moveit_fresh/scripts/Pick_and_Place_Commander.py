@@ -2,7 +2,7 @@
 
 import rospy
 import moveit_commander
-from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Pose, Twist
 from barrett_wam_msgs.srv import JointMove  # Correct service type import
 from std_srvs.srv import Empty  # For the go_home service
 import sys
@@ -13,7 +13,8 @@ from math import pi
 from std_msgs.msg import String
 from moveit_commander.conversions import pose_to_list
 import warnings
-
+from geometry_msgs.msg import PoseStamped
+import time
 
 def call_empty_service(service_name):
     rospy.loginfo(f"Calling {service_name} service...")
@@ -33,7 +34,6 @@ def call_empty_service(service_name):
 
 def move_cartesian_path(x, y, z, qx, qy, qz, qw):
     
-    
     move_group.set_start_state_to_current_state()
 
     
@@ -50,13 +50,11 @@ def move_cartesian_path(x, y, z, qx, qy, qz, qw):
     waypoints.append(pose_goal)
     
     move_group.set_pose_target(pose_goal)
-    
 
 
     (plan, fraction) = move_group.compute_cartesian_path(
         waypoints, 0.01, False
     )
-    
 
 
     print("Fraction: ",fraction)
@@ -74,10 +72,6 @@ def move_cartesian_path(x, y, z, qx, qy, qz, qw):
     display_trajectory.trajectory.append(plan)
     # Publish
     display_trajectory_publisher.publish(display_trajectory)
-
-        
-
-    
 
 def call_joint_move_service(joint_positions):
     rospy.loginfo("Calling /wam/joint_move service...")
@@ -107,6 +101,57 @@ def move_to_place():
     rospy.loginfo("Moving to 'place' position...")
     place_positions = [2.6, 0.992, 1.09, 0.73, -0.878, 1.591, 0.244]
     move_to_joint_positions(place_positions)
+    
+def go_to_pickup():
+    
+    summit_pub = rospy.Publisher('/uwarl/move_base_simple/goal', PoseStamped, queue_size=10)
+        
+    rospy.sleep(1)
+        
+    # Create PoseStamped message
+    goal_msg = PoseStamped()
+    goal_msg.header.frame_id = "uwarl_map"
+    goal_msg.header.stamp = rospy.Time.now()
+    
+    # Set position
+    goal_msg.pose.position.x = 1.279
+    goal_msg.pose.position.y = -1.354
+    goal_msg.pose.position.z = 0.0  # Assuming 2D movement
+    
+    # Set orientation (quaternion)
+    goal_msg.pose.orientation.x = 0.0
+    goal_msg.pose.orientation.y = 0.0
+    goal_msg.pose.orientation.z = 0.316
+    goal_msg.pose.orientation.w = 0.948
+    
+    # Publish the message
+    rospy.loginfo("Publishing goal: x=1.279, y=-1.354, quat_z=0.361, quat_w=0.9325")
+    summit_pub.publish(goal_msg)
+
+def send_velocity_command():
+    """Send velocity commands to move forward for 1 second."""
+    rospy.loginfo("Sending velocity command to move forward...")
+    cmd_vel_pub = rospy.Publisher('/uwarl/move_base/cmd_vel', Twist, queue_size=10)
+
+    # Create the Twist message
+    velocity_msg = Twist()
+    velocity_msg.linear.x = -0.2  # Move forward at 0.1 m/s
+    velocity_msg.linear.y = 0.0
+    velocity_msg.linear.z = 0.0
+    velocity_msg.angular.x = 0.0
+    velocity_msg.angular.y = 0.0
+    velocity_msg.angular.z = 0.0
+
+    # Publish the message repeatedly for 1 second
+    start_time = time.time()
+    while time.time() - start_time < 3.0:
+        cmd_vel_pub.publish(velocity_msg)
+        rospy.sleep(0.1)  # Publish at 10 Hz
+
+    # Stop the robot after 1 second
+    velocity_msg.linear.x = 0.0
+    cmd_vel_pub.publish(velocity_msg)
+    rospy.loginfo("Velocity command completed.")
 
 if __name__ == "__main__":
     
@@ -135,7 +180,7 @@ if __name__ == "__main__":
         
         while not rospy.is_shutdown():
             user_input = input(
-                "Enter 'p' for Cartesian pose, 'j' for joint positions, 'h' to go home, 'pick', 'place', or 'q' to quit: "
+                "Enter 'p' for Cartesian pose, 'j' for joint positions, 'h' to go home, 'pick', 'place', 'goP', or 'q' to quit: "
             )
 
             if user_input.lower() == "q":
@@ -148,7 +193,10 @@ if __name__ == "__main__":
 
                 elif user_input.strip() == "place":
                     move_to_place()
-
+                    
+                elif user_input.strip() == "go":
+                    go_to_pickup()
+                    
                 elif user_input.startswith("p"):
                     _, x, y, z, qx, qy, qz, qw = user_input.split()
                     x, y, z, qx, qy, qz, qw = map(float, [x, y, z, qx, qy, qz, qw])
@@ -181,9 +229,12 @@ if __name__ == "__main__":
                 elif user_input.strip() == "cs":
                     call_empty_service("/wam/bhand/close_spread")
 
+                elif user_input.strip() == "goP":
+                    send_velocity_command()
+
                 else:
                     rospy.logwarn(
-                        "Invalid input format. Please start with 'p', 'j', 'h', 'og', 'os', 'cg', 'cs', 'pick', or 'place'."
+                        "Invalid input format. Please start with 'p', 'j', 'h', 'og', 'os', 'cg', 'cs', 'pick', 'place', or 'goP'."
                     )
 
             except ValueError:

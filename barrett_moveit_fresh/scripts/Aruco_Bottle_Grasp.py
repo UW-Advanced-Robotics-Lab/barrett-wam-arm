@@ -1,8 +1,8 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import rospy
 import moveit_commander
-from geometry_msgs.msg import Pose, PoseStamped
+from geometry_msgs.msg import Pose, PoseStamped, Twist
 from barrett_wam_msgs.srv import JointMove  # Correct service type import
 from std_srvs.srv import Empty  # For the go_home service
 import sys
@@ -13,6 +13,8 @@ from math import pi
 from std_msgs.msg import String
 from moveit_commander.conversions import pose_to_list
 import warnings
+import time
+
 
 # Global variable to store the latest ArUco marker pose
 aruco_pose = None
@@ -80,7 +82,7 @@ def go_home():
 
 def move_to_pick():
     rospy.loginfo("Moving to 'pick' position...")
-    pick_positions = [0, 0.6909, 0, 1.3406, 0, 1.1206, 0]
+    pick_positions = [-0.3, 0.6909, 0, 1.3406, 0, 1.1206, -0.3]
     move_to_joint_positions(pick_positions)
 
 def move_to_pick2():
@@ -91,12 +93,12 @@ def move_to_pick2():
 
 def move_to_place():
     rospy.loginfo("Moving to 'place' position...")
-    place_positions = [2.5392860542321234, 1.018047391209697, 1.106960237316661, 0.9197067034923244, -0.9086859388856592, 1.4395698053735044, 0.3361811880751386]
+    place_positions = [-2.6, 0.972, -0.886, 0.911, 0.702, 1.438, -0.210]
     move_to_joint_positions(place_positions)
     
 def move_to_place2():
     rospy.loginfo("Moving to 'place' position...")
-    place_positions = [2.5937423722020636, 0.9881008282178765, 1.1181352036581906, 1.044214810775709, -0.9086859388856593, 1.3676150364572193, 0.5066349139359744]
+    place_positions = [-2.6, 0.90, -0.886, 0.911, 0.702, 1.438, -0.210]
     move_to_joint_positions(place_positions)
 
 def wait_for_aruco_pose():
@@ -137,6 +139,84 @@ def find_and_move():
         current_pose.orientation.z,
         current_pose.orientation.w,
     )
+    
+def go_to_pickup():
+    
+    summit_pub = rospy.Publisher('/uwarl/move_base_simple/goal', PoseStamped, queue_size=10)
+        
+    rospy.sleep(1)
+        
+    # Create PoseStamped message
+    goal_msg = PoseStamped()
+    goal_msg.header.frame_id = "uwarl_map"
+    goal_msg.header.stamp = rospy.Time.now()
+    
+    # Set position
+    goal_msg.pose.position.x = 1.279
+    goal_msg.pose.position.y = -1.354
+    goal_msg.pose.position.z = 0.0  # Assuming 2D movement
+    
+    # Set orientation (quaternion)
+    goal_msg.pose.orientation.x = 0.0
+    goal_msg.pose.orientation.y = 0.0
+    goal_msg.pose.orientation.z = 0.316
+    goal_msg.pose.orientation.w = 0.948
+    
+    # Publish the message
+    rospy.loginfo("Publishing goal: x=1.279, y=-1.354, quat_z=0.361, quat_w=0.9325")
+    summit_pub.publish(goal_msg)
+
+def send_velocity_command():
+    """Send velocity commands to move forward for 1 second."""
+    rospy.loginfo("Sending velocity command to move forward...")
+    cmd_vel_pub = rospy.Publisher('/uwarl/move_base/cmd_vel', Twist, queue_size=10)
+
+    # Create the Twist message
+    velocity_msg = Twist()
+    velocity_msg.linear.x = 0.2  # Move forward at 0.1 m/s
+    velocity_msg.linear.y = 0.0
+    velocity_msg.linear.z = 0.0
+    velocity_msg.angular.x = 0.0
+    velocity_msg.angular.y = 0.0
+    velocity_msg.angular.z = 0.0
+
+    # Publish the message repeatedly for 1 second
+    start_time = time.time()
+    while time.time() - start_time < 3.0:
+        cmd_vel_pub.publish(velocity_msg)
+        rospy.sleep(0.1)  # Publish at 10 Hz
+
+    # Stop the robot after 1 second
+    velocity_msg.linear.x = 0.0
+    cmd_vel_pub.publish(velocity_msg)
+    rospy.loginfo("Velocity command completed.")
+
+def send_velocity_command2():
+    """Send velocity commands to move forward for 1 second."""
+    rospy.loginfo("Sending velocity command to move forward...")
+    cmd_vel_pub = rospy.Publisher('/uwarl/move_base/cmd_vel', Twist, queue_size=10)
+
+    # Create the Twist message
+    velocity_msg = Twist()
+    velocity_msg.linear.x = -0.2  # Move forward at 0.1 m/s
+    velocity_msg.linear.y = 0.0
+    velocity_msg.linear.z = 0.0
+    velocity_msg.angular.x = 0.0
+    velocity_msg.angular.y = 0.0
+    velocity_msg.angular.z = 0.0
+
+    # Publish the message repeatedly for 1 second
+    start_time = time.time()
+    while time.time() - start_time < 5.0:
+        cmd_vel_pub.publish(velocity_msg)
+        rospy.sleep(0.1)  # Publish at 10 Hz
+
+    # Stop the robot after 1 second
+    velocity_msg.linear.x = 0.0
+    cmd_vel_pub.publish(velocity_msg)
+    rospy.loginfo("Velocity command completed.")
+
+
 
 if __name__ == "__main__":
     
@@ -239,7 +319,16 @@ if __name__ == "__main__":
                     rospy.loginfo("Current Cartesian Pose:")
                     rospy.loginfo(f"Position: x={current_pose.position.x}, y={current_pose.position.y}, z={current_pose.position.z}")
                     rospy.loginfo(f"Orientation: x={current_pose.orientation.x}, y={current_pose.orientation.y}, z={current_pose.orientation.z}, w={current_pose.orientation.w}")
+                
+                elif user_input.strip() == "go":
+                    go_to_pickup()
+                    
+                elif user_input.strip() == "goF":
+                    send_velocity_command()
 
+                elif user_input.strip() == "goB":
+                    send_velocity_command2()
+                    
                 else:
                     rospy.logwarn("Invalid input. Try again.")
             except ValueError:
