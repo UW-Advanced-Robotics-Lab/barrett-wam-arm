@@ -75,6 +75,13 @@ def move_cartesian_path(x, y, z, qx, qy, qz, qw):
     move_group.set_pose_target(pose_goal)
     (plan, fraction) = move_group.compute_cartesian_path(waypoints, 0.01, False)
     rospy.loginfo(f"Fraction: {fraction}")
+    display_trajectory = moveit_msgs.msg.DisplayTrajectory()
+    display_trajectory.trajectory_start = robot.get_current_state()
+    display_trajectory.trajectory.append(plan)
+    display_trajectory_publisher.publish(display_trajectory)
+    
+    
+    
     if fraction > 0.95:
         rospy.loginfo("Successfully planned the Cartesian path.")
         joint_trajectory = plan.joint_trajectory
@@ -82,10 +89,6 @@ def move_cartesian_path(x, y, z, qx, qy, qz, qw):
         rospy.loginfo("Calculated final joint positions (without execution):")
         rospy.loginfo(final_joint_positions)
         call_joint_move_service(final_joint_positions)
-    display_trajectory = moveit_msgs.msg.DisplayTrajectory()
-    display_trajectory.trajectory_start = robot.get_current_state()
-    display_trajectory.trajectory.append(plan)
-    display_trajectory_publisher.publish(display_trajectory)
 
 def call_joint_move_service(joint_positions):
     rospy.loginfo("Calling /wam/joint_move service...")
@@ -106,7 +109,7 @@ def go_home():
 
 def move_to_pick():
     rospy.loginfo("Moving to 'pick' position...")
-    pick_positions = [-0.3, 0.6909, 0, 1.3406, 0, 1.1206, -0.3]
+    pick_positions = [-0.3, 0.6909, 0, 1.3406, 0, 1.0206, -0.3]
     move_to_joint_positions(pick_positions)
 
 def move_to_pick2():
@@ -117,7 +120,7 @@ def move_to_pick2():
 
 def move_to_place():
     rospy.loginfo("Moving to 'place' position...")
-    place_positions = [-0.3, 0.6909, 0, 1.3406, 0, 1.1206, -0.3]
+    place_positions = [-0.3, 0.714, 0, 1.3406, 0, 1.106, -0.3]
     move_to_joint_positions(place_positions)
     
 def move_to_place2():
@@ -125,8 +128,12 @@ def move_to_place2():
     place_positions = [-2.6, 0.90, -0.886, 0.911, 0.702, 1.438, -0.210]
     move_to_joint_positions(place_positions)
 
+def store_bottle2():
+    place_positions = [0.142, -1.438, 1.327, 2.708, 1.233, 1.5, 1.15]
+    move_to_joint_positions(place_positions)
+    
 def store_bottle():
-    place_positions = [0, -1.081, 1.561, 2.9, 1.240, 0.999, 0.26]
+    place_positions = [0.12147, -1.1946, 1.5208, 2.697, 1.2394, 1.2198, 0.1823]
     move_to_joint_positions(place_positions)
 
 def wait_for_aruco_pose():
@@ -152,10 +159,12 @@ def find_and_move():
     rospy.loginfo(f"Orientation: {current_pose.orientation}")
 
     # Calculate the new position
-    new_x = current_pose.position.x + aruco_marker_pose.position.x + 0.06
-    new_y = current_pose.position.y - aruco_marker_pose.position.y + 0.1
-    new_z = current_pose.position.z - aruco_marker_pose.position.z + 0.1
+    new_x = current_pose.position.x + aruco_marker_pose.position.x + 0.02
+    new_y = current_pose.position.y - aruco_marker_pose.position.y + 0.095
+    new_z = current_pose.position.z - aruco_marker_pose.position.z + 0.15
     rospy.loginfo(f"Moving to new position: x={new_x}, y={new_y}, z={new_z}")
+    
+    
 
     # Move to the new position
     move_cartesian_path(
@@ -386,7 +395,10 @@ if __name__ == "__main__":
 
                 elif user_input.strip() == "goB":
                     send_velocity_command2()
-                
+                    
+                elif user_input.strip() == "store2":
+                    store_bottle2()
+                    
                 elif user_input.strip() == "store":
                     store_bottle()
                     
