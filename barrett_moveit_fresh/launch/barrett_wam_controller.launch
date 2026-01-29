@@ -1,0 +1,20 @@
+<launch>
+  <!-- Start the controller manager -->
+  <node name="controller_manager" 
+        pkg="controller_manager" 
+        type="controller_manager" 
+        respawn="false" 
+        output="screen" />
+
+  <!-- Load ROS controllers YAML -->
+  <rosparam file="/home/corey/UWARL_catkin_ws/src/barrett-wam-arm/barrett_moveit_fresh/config/ros_controllers.yaml"
+            command="load" />
+
+  <!-- Spawn controllers -->
+  <node name="controller_spawner" 
+        pkg="controller_manager" 
+        type="spawner"
+        args="joint_state_controller joint_trajectory_controller bhand_joint_trajectory_controller"
+        respawn="false" 
+        output="screen" />
+</launch>

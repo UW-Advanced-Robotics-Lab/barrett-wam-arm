@@ -1,0 +1,26 @@
+controller_list:  
+- name: joint_trajectory_controller
+   action_ns: follow_joint_trajectory
+   type: FollowJointTrajectory
+   default: true
+   joints: 
+    - q1
+    - q2
+    - q3
+    - q4
+    - q5
+    - q6
+    - q7
+- name: bhand_joint_trajectory_controller
+   action_ns: follow_joint_trajectory
+   type: FollowJointTrajectory
+   default: true
+   joints: 
+    - bhand_j11_joint
+    - bhand_j12_joint
+    - bhand_j13_joint
+    - bhand_j21_joint
+    - bhand_j22_joint
+    - bhand_j23_joint
+    - bhand_j32_joint
+    - bhand_j33_joint
