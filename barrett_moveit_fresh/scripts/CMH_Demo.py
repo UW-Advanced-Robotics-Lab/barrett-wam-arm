@@ -128,6 +128,12 @@ def move_to_place2():
     place_positions = [-2.6, 0.90, -0.886, 0.911, 0.702, 1.438, -0.210]
     move_to_joint_positions(place_positions)
 
+
+def move_to_neutral_wam():
+    rospy.loginfo("Moving WAM to neutral [0, 0, 0, 1.572, 0, 0, 1.572]...")
+    neutral_positions = [0.0, 0.0, 0.0, 1.572, 0.0, 0.0, 1.572]
+    move_to_joint_positions(neutral_positions)
+
 def store_bottle2():
     place_positions = [0.142, -1.438, 1.327, 2.708, 1.233, 1.5, 1.15]
     move_to_joint_positions(place_positions)
@@ -314,7 +320,7 @@ if __name__ == "__main__":
 
         while not rospy.is_shutdown():
             user_input = input(
-                "Enter 'p' for Cartesian pose, 'j' for joint positions, 'h' to go home, 'pick', 'place', 'aruco', 'find', or 'q' to quit: "
+                "Enter 'p' for Cartesian pose, 'j' for joint positions, 'n' for WAM neutral, 'h' to go home, 'pick', 'place', 'aruco', 'find', or 'q' to quit: "
             )
 
             if user_input.lower() == "q":
@@ -343,6 +349,9 @@ if __name__ == "__main__":
                     _, j1, j2, j3, j4, j5, j6, j7 = user_input.split()
                     joint_positions = list(map(float, [j1, j2, j3, j4, j5, j6, j7]))
                     move_to_joint_positions(joint_positions)
+
+                elif user_input.strip() == "n":
+                    move_to_neutral_wam()
 
                 elif user_input.strip() == "aruco":
                     
